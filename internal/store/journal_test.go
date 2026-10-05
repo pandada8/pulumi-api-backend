@@ -2,10 +2,12 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/pandada8/pulumid/internal/pulumicompat"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"strings"
 	"testing"
 )
 
@@ -53,5 +55,34 @@ func TestJournalBeginMayOmitOperation(t *testing.T) {
 	}
 	if e := v.add(apitype.JournalEntry{Version: 1, Kind: 2, SequenceID: 2, OperationID: 1}); e != nil {
 		t.Fatal(e)
+	}
+}
+func BenchmarkReplay(b *testing.B) {
+	for _, n := range []int{1000, 10000} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			var envelope apitype.UntypedDeployment
+			var deployment apitype.DeploymentV3
+			json.Unmarshal(pulumicompat.Empty(), &envelope)
+			json.Unmarshal(envelope.Deployment, &deployment)
+			for i := 0; i < n; i++ {
+				deployment.Resources = append(deployment.Resources, apitype.ResourceV3{URN: resource.URN(fmt.Sprintf("urn:pulumi:dev::wire::backendtest:index:Item::r%d", i)), Type: tokens.Type("backendtest:index:Item"), Custom: true, ID: resource.ID(fmt.Sprint(i)), Inputs: map[string]any{"value": strings.Repeat("x", 1024)}})
+			}
+			raw, _ := json.Marshal(deployment)
+			base, _ := json.Marshal(apitype.UntypedDeployment{Version: 3, Deployment: raw})
+			entries := []apitype.JournalEntry{}
+			for i := 0; i < n/100; i++ {
+				r := deployment.Resources[i]
+				r.Outputs = map[string]any{"value": "changed"}
+				index := int64(i)
+				entries = append(entries, apitype.JournalEntry{Version: 1, Kind: 0, SequenceID: int64(2*i + 1), OperationID: int64(i + 1)}, apitype.JournalEntry{Version: 1, Kind: 1, SequenceID: int64(2*i + 2), OperationID: int64(i + 1), RemoveOld: &index, State: &r})
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if _, e := replay(base, entries); e != nil {
+					b.Fatal(e)
+				}
+			}
+		})
 	}
 }
