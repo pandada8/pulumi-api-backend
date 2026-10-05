@@ -1,0 +1,9 @@
+.git
+.dev
+.env
+bin
+test-results
+tests
+docs
+third_party/pulumi/.git
+third_party/pulumi/tests

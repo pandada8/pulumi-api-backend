@@ -1,0 +1,57 @@
+package store
+
+import (
+	"encoding/json"
+	"github.com/pandada8/pulumid/internal/pulumicompat"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"testing"
+)
+
+func TestJournalReplayRecovery(t *testing.T) {
+	r := apitype.ResourceV3{URN: resource.URN("urn:pulumi:dev::wire::backendtest:index:Item::r"), Type: tokens.Type("backendtest:index:Item"), Custom: true, ID: resource.ID("world-r"), Outputs: map[string]any{"value": "v1"}}
+	entries := []apitype.JournalEntry{{Version: 1, Kind: 0, SequenceID: 12, OperationID: 1, Operation: &apitype.OperationV2{Type: apitype.OperationTypeCreating, Resource: r}}}
+	pending, e := replay(pulumicompat.Empty(), entries)
+	if e != nil {
+		t.Fatal(e)
+	}
+	var u apitype.UntypedDeployment
+	var d apitype.DeploymentV3
+	json.Unmarshal(pending, &u)
+	json.Unmarshal(u.Deployment, &d)
+	if len(d.PendingOperations) != 1 || len(d.Resources) != 0 {
+		t.Fatal("lost pending create")
+	}
+	entries = append(entries, apitype.JournalEntry{Version: 1, Kind: 1, SequenceID: 11, OperationID: 1, State: &r})
+	idx := int64(1)
+	updated := r
+	updated.Outputs = map[string]any{"value": "v2"}
+	entries = append(entries, apitype.JournalEntry{Version: 1, Kind: 4, SequenceID: 13, OperationID: 2, RemoveNew: &idx, State: &updated})
+	out, e := replay(pulumicompat.Empty(), entries)
+	if e != nil {
+		t.Fatal(e)
+	}
+	d = apitype.DeploymentV3{}
+	json.Unmarshal(out, &u)
+	json.Unmarshal(u.Deployment, &d)
+	if len(d.Resources) != 1 || d.Resources[0].Outputs["value"] != "v2" || len(d.PendingOperations) != 0 {
+		t.Fatal("outputs/update merge")
+	}
+	if _, e = replay(pulumicompat.Empty(), []apitype.JournalEntry{{Version: 1, Kind: 6, SequenceID: 1}}); e == nil {
+		t.Fatal("missing secrets provider accepted")
+	}
+	bad := int64(42)
+	if _, e = replay(pulumicompat.Empty(), []apitype.JournalEntry{{Version: 1, Kind: 4, SequenceID: 1, RemoveNew: &bad, State: &r}}); e == nil {
+		t.Fatal("invalid reference accepted")
+	}
+}
+func TestJournalBeginMayOmitOperation(t *testing.T) {
+	v := newValidator(0)
+	if e := v.add(apitype.JournalEntry{Version: 1, Kind: 0, SequenceID: 1, OperationID: 1}); e != nil {
+		t.Fatal(e)
+	}
+	if e := v.add(apitype.JournalEntry{Version: 1, Kind: 2, SequenceID: 2, OperationID: 1}); e != nil {
+		t.Fatal(e)
+	}
+}

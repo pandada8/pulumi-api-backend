@@ -1,0 +1,3 @@
+name: basic
+runtime: go
+description: API backend compatibility fixture
