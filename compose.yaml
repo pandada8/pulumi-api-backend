@@ -25,7 +25,7 @@ services:
     volumes:
       - database:/var/lib/postgresql/data
     healthcheck:
-      test: [CMD-SHELL, "pg_isready -U backend -d backend"]
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U backend -d backend"]
       interval: 2s
       timeout: 2s
       retries: 30
