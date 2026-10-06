@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/pandada8/pulumid/internal/core"
+	"github.com/pandada8/pulumi-api-backend/internal/core"
 	"os"
 )
 

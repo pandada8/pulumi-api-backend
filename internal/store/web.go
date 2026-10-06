@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"github.com/pandada8/pulumid/internal/core"
-	"github.com/pandada8/pulumid/internal/pulumicompat"
+	"github.com/pandada8/pulumi-api-backend/internal/core"
+	"github.com/pandada8/pulumi-api-backend/internal/pulumicompat"
 	"strconv"
 	"time"
 )

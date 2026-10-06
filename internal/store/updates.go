@@ -6,8 +6,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"github.com/google/uuid"
-	"github.com/pandada8/pulumid/internal/core"
-	"github.com/pandada8/pulumid/internal/pulumicompat"
+	"github.com/pandada8/pulumi-api-backend/internal/core"
+	"github.com/pandada8/pulumi-api-backend/internal/pulumicompat"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"time"
 )

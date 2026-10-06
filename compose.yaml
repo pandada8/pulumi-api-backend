@@ -1,6 +1,6 @@
-name: pulumid
+name: pulumi-api-backend
 x-api: &api
-  image: pulumid:local
+  image: pulumi-api-backend:local
   build: .
   user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
   environment:

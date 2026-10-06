@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lib/pq"
-	"github.com/pandada8/pulumid/internal/config"
-	"github.com/pandada8/pulumid/internal/faults"
+	"github.com/pandada8/pulumi-api-backend/internal/config"
+	"github.com/pandada8/pulumi-api-backend/internal/faults"
 	"sync"
 )
 

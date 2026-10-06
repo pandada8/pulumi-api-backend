@@ -6,8 +6,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"github.com/google/uuid"
-	"github.com/pandada8/pulumid/internal/core"
-	"github.com/pandada8/pulumid/internal/faults"
+	"github.com/pandada8/pulumi-api-backend/internal/core"
+	"github.com/pandada8/pulumi-api-backend/internal/faults"
 	"strings"
 )
 

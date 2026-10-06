@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"github.com/pandada8/pulumid/internal/config"
-	"github.com/pandada8/pulumid/internal/httpapi"
-	"github.com/pandada8/pulumid/internal/store"
+	"github.com/pandada8/pulumi-api-backend/internal/config"
+	"github.com/pandada8/pulumi-api-backend/internal/httpapi"
+	"github.com/pandada8/pulumi-api-backend/internal/store"
 	"log"
 	"net/http"
 	"os"

@@ -1,4 +1,4 @@
-module github.com/pandada8/pulumid
+module github.com/pandada8/pulumi-api-backend
 
 go 1.26.5
 

@@ -23,7 +23,7 @@ RUN CGO_ENABLED=0 go build -ldflags '-X github.com/pulumi/pulumi/sdk/v3/go/commo
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/backend /out/backendctl /app/
-COPY --from=build /out/licenses /usr/share/licenses/pulumid/
+COPY --from=build /out/licenses /usr/share/licenses/pulumi-api-backend/
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 USER 65532:65532
 WORKDIR /app

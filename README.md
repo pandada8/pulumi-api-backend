@@ -1,10 +1,16 @@
-# Pulumid
+# pulumi-api-backend
 
-A self-hosted Pulumi HTTP state backend in Go and PostgreSQL 17, with full checkpoints, journal v1, stack-scoped authenticated encryption, and a read-only browser console. The unmodified Pulumi CLI executes your program and providers locally; Pulumid persists state, leases, history, and engine events.
+A self-hosted Pulumi HTTP state backend in Go and PostgreSQL 17, with full checkpoints, journal v1, stack-scoped authenticated encryption, and a read-only browser console. The unmodified Pulumi CLI executes your program and providers locally; pulumi-api-backend persists state, leases, history, and engine events.
 
 Compatibility is pinned to Pulumi commit `21bf19ba40dba5dce0f565e8c614b5d8aa4dbb17`. The CLI and Go language host are built from that tree. `3.246.0` is the explicit build version label, not a claim that this commit is the upstream 3.246.0 release. Go toolchain: 1.26.5. The original detailed design is in `docs/implementation-spec.md`; implementation differences and validation limits are in `docs/supported-api.md` and `docs/test-results.md`.
 
 ## Start locally
+
+The Pulumi submodule is a build/test source dependency, not a runtime service
+dependency. It pins the SDK, journal replayer, and test CLI to the same verified
+commit. A future build can replace it with commit-pinned Go modules and a
+separate CLI source download; currently `go.mod`, Dockerfile, and test scripts
+expect the submodule checkout.
 
 Run these commands from the repository root. Requirements: Go 1.26.5, Docker with Compose v2, Git, and Python 3. Clone with `--recurse-submodules`, or run `git submodule update --init` first.
 
@@ -80,7 +86,7 @@ is needed. Enable Actions/package writes in repository settings; after the first
 push, set GHCR package visibility to public if anonymous pulls are intended.
 
 The container contains application and dependency licenses under
-`/usr/share/licenses/pulumid`. MPL-covered source files are included there too.
+`/usr/share/licenses/pulumi-api-backend`. MPL-covered source files are included there too.
 See [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## License

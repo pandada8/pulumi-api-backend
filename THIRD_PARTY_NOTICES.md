@@ -11,8 +11,8 @@ Its original notices are preserved in `third_party/pulumi`.
 
 Container builds collect the Go dependencies' license texts, notices, and
 source files required by licenses such as MPL-2.0 using `go-licenses save`.
-These are included at `/usr/share/licenses/pulumid/dependencies` in the image.
-The project's license and this document are in `/usr/share/licenses/pulumid`.
+These are included at `/usr/share/licenses/pulumi-api-backend/dependencies` in the image.
+The project's license and this document are in `/usr/share/licenses/pulumi-api-backend`.
 The Go toolchain license and patent notice are also included there.
 Debian package copyright information is under `/usr/share/doc`.
 
