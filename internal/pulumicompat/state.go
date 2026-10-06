@@ -323,6 +323,13 @@ func ValidateJournal(raw []byte) error {
 				return fmt.Errorf("unsupported v4 journal field %s", k)
 			}
 		}
+		var typed apitype.ResourceV3
+		if e := json.Unmarshal(raw, &typed); e != nil {
+			return e
+		}
+		if !typed.URN.IsValid() || typed.Type == "" {
+			return fmt.Errorf("invalid journal resource")
+		}
 		return nil
 	}
 	if e := check(m["state"]); e != nil {
@@ -335,6 +342,18 @@ func ValidateJournal(raw []byte) error {
 		}
 		if e := check(op["resource"]); e != nil {
 			return e
+		}
+		var typed apitype.OperationV2
+		if e := json.Unmarshal(b, &typed); e != nil {
+			return e
+		}
+		switch typed.Type {
+		case apitype.OperationTypeCreating, apitype.OperationTypeUpdating, apitype.OperationTypeDeleting, apitype.OperationTypeReading:
+		default:
+			return fmt.Errorf("invalid journal operation type")
+		}
+		if !typed.Resource.URN.IsValid() || typed.Resource.Type == "" {
+			return fmt.Errorf("invalid journal operation resource")
 		}
 	}
 	if b := m["newSnapshot"]; len(b) > 0 && string(b) != "null" {

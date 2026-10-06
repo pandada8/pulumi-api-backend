@@ -36,6 +36,15 @@ func replay(raw []byte, entries []apitype.JournalEntry) (out []byte, err error) 
 		if err = r.Add(entry); err != nil {
 			return nil, err
 		}
+		if entry.Kind == apitype.JournalEntryKindRebuiltBaseState {
+			deployment, e := r.GenerateDeployment()
+			if e != nil {
+				return nil, e
+			}
+			validator.baseLen = int64(len(deployment.Deployment.Resources))
+			validator.produced = map[int64]bool{}
+			validator.begun = map[int64]bool{}
+		}
 	}
 	dep, err := r.GenerateDeployment()
 	if err != nil {
@@ -138,48 +147,27 @@ func (s *Store) AppendJournal(ctx context.Context, tx *sql.Tx, st Stack, u Updat
 	if len(newItems) == 0 {
 		return nil
 	}
-	cacheAny, _ := s.validators.LoadOrStore(u.ID, newValidator(0))
-	cache := cacheAny.(*journalValidator)
-	cache.mu.Lock()
-	s.afterFinish(tx, func(committed bool) {
-		if !committed {
-			cache.count = -1
-		}
-		cache.mu.Unlock()
-	})
-	if cache.count != u.JournalCount {
-		var raw []byte
-		if e = tx.QueryRowContext(ctx, `SELECT raw_bytes FROM snapshots WHERE id=$1`, u.Base).Scan(&raw); e != nil {
-			return e
-		}
-		var envelope apitype.UntypedDeployment
-		var base apitype.DeploymentV3
-		if e = json.Unmarshal(raw, &envelope); e != nil {
-			return e
-		}
-		if e = json.Unmarshal(envelope.Deployment, &base); e != nil {
-			return e
-		}
-		v := newValidator(len(base.Resources))
-		existing, e := s.journal(ctx, tx, u.ID, u.JournalCount)
-		if e != nil {
-			return e
-		}
-		for _, entry := range existing {
-			if e = v.add(entry); e != nil {
-				return e
-			}
-		}
-		cache.baseLen = v.baseLen
-		cache.produced = v.produced
-		cache.begun = v.begun
-		cache.terminal = v.terminal
-		cache.count = u.JournalCount
+	// Never acknowledge entries that cannot produce a readable deployment.
+	// Validate the complete candidate before publishing rows or the head.
+	var raw, hash []byte
+	if e = tx.QueryRowContext(ctx, `SELECT raw_bytes,sha256 FROM snapshots WHERE id=$1`, u.Base).Scan(&raw, &hash); e != nil {
+		return e
+	}
+	if !hmac.Equal(hash, core.Digest(raw)) {
+		return fmt.Errorf("snapshot integrity failure")
+	}
+	candidate, e := s.journal(ctx, tx, u.ID, u.JournalCount)
+	if e != nil {
+		return e
 	}
 	for _, i := range newItems {
-		if e = cache.add(i.entry); e != nil {
+		candidate = append(candidate, i.entry)
+	}
+	if _, e = replay(raw, candidate); e != nil {
+		if _, ok := e.(*Error); ok {
 			return e
 		}
+		return Fail(422, "Invalid journal candidate: "+e.Error())
 	}
 	count := u.JournalCount
 	for _, i := range newItems {
@@ -194,8 +182,5 @@ func (s *Store) AppendJournal(ctx context.Context, tx *sql.Tx, st Stack, u Updat
 		return e
 	}
 	_, e = tx.ExecContext(ctx, `UPDATE stack_heads SET snapshot_id=$2,journal_update_id=$3,journal_upto=$4,generation=generation+1 WHERE stack_id=$1`, st.ID, u.Base, u.ID, count)
-	if e == nil {
-		cache.count = count
-	}
 	return e
 }

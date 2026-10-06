@@ -19,7 +19,6 @@ type Store struct {
 	DB         *sql.DB
 	Config     config.Config
 	finalizers sync.Map
-	validators sync.Map
 }
 type Error struct {
 	Code    int

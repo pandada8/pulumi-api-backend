@@ -2,20 +2,17 @@ package store
 
 import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
-	"sync"
 )
 
-// Cached references are disposable. Cross-instance count changes rebuild them from committed journal rows.
+// References are reconstructed for each complete candidate replay.
 type journalValidator struct {
-	mu              sync.Mutex
-	count           int64
 	baseLen         int64
 	produced, begun map[int64]bool
 	terminal        bool
 }
 
 func newValidator(n int) *journalValidator {
-	return &journalValidator{count: -1, baseLen: int64(n), produced: map[int64]bool{}, begun: map[int64]bool{}}
+	return &journalValidator{baseLen: int64(n), produced: map[int64]bool{}, begun: map[int64]bool{}}
 }
 func (v *journalValidator) add(e apitype.JournalEntry) error {
 	if e.Version != 1 || e.Kind < 0 || e.Kind > 7 || e.SequenceID <= 0 || e.OperationID < 0 {
@@ -71,7 +68,7 @@ func (v *journalValidator) add(e apitype.JournalEntry) error {
 		if len(v.begun) > 0 {
 			return Fail(400, "Rebuild with pending operation")
 		}
-		v.terminal = true
+		v.terminal = len(v.produced) > 0
 	}
 	return nil
 }

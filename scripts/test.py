@@ -202,8 +202,26 @@ def journal(c,c2):
     c.call('PATCH',u+'/journalentries',{'entries':[dict(outputs,kind=99,sequenceID=14)]},lease=t,status=422)
     c.call('PATCH',u+'/journalentries',{'entries':[dict(outputs,kind=5,newSnapshot=None,sequenceID=14)]},lease=t,status=400)
     c.call('PATCH',u+'/journalentries',{'entries':[dict(outputs,operationID=3)]},lease=t,status=409)
+    # Invalid states/operations must not change either journal count or readable head.
+    for bad in [dict(success,sequenceID=21,state={}),dict(begin,sequenceID=22,operationID=8,operation={'type':'creating','resource':{}}),dict(begin,sequenceID=23,operationID=8,operation={'type':'invalid','resource':r}),dict(outputs,sequenceID=24,state=dict(r,provider='invalid-provider-reference'))]:
+        c.call('PATCH',u+'/journalentries',{'entries':[bad]},lease=t,status=422)
+        assert sql("SELECT journal_count FROM updates WHERE id='"+u.split('/')[-1]+"'").strip()=='3'
+        assert c2.call('GET',s+'/export')['deployment']['resources']==state['resources']
+    c.call('PATCH',u+'/journalentries',{'entries':[dict(begin,sequenceID=25,operationID=8),dict(outputs,sequenceID=26,state=dict(r,provider='invalid-provider-reference'))]},lease=t,status=422)
+    assert sql("SELECT journal_count FROM updates WHERE id='"+u.split('/')[-1]+"'").strip()=='3'
     c.call('POST',u+'/complete',{'status':'succeeded'},lease=t,status=204)
     assert c.call('GET',s+'/export/1')['deployment']['resources']==state['resources']
+    # No worker runs: terminal full updates must retain the journal baseline.
+    for terminal in ['failed','cancelled','expired']:
+        fu,ft,_=c.update(s)
+        if terminal=='expired':
+            sql("UPDATE updates SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id='"+fu.split('/')[-1]+"'")
+            c.call('GET',s)
+        elif terminal=='cancelled':c.call('POST',fu+'/cancel',status=204)
+        else:c.call('POST',fu+'/complete',{'status':'failed'},lease=ft,status=204)
+        version=sql("SELECT version FROM updates WHERE id='"+fu.split('/')[-1]+"'").strip()
+        assert c.call('GET',s+'/export/'+version)['deployment']['resources']==state['resources']
+        assert c.call('GET',s+'/export')['deployment']['resources']==state['resources']
     c.call('DELETE',s,status=400);c.call('DELETE',s+'?force=true',status=204)
 
 def sql(query):
@@ -275,6 +293,7 @@ def e2e(c,env,mode):
     out=run('stack','output','value');assert out.strip()=='hello'
     run('config','set','message','updated');run('up','--yes','--non-interactive','--skip-preview')
     run('config','set','replaceKey','replacement');run('up','--yes','--non-interactive','--skip-preview')
+    run('up','--refresh','--yes','--non-interactive','--skip-preview')
     run('refresh','--yes','--non-interactive','--skip-preview')
     # Import an independently created world resource into the same deployment.
     data={'inputs':{'name':'imported','value':'outside','replaceKey':'import'}}
@@ -397,6 +416,9 @@ def main():
         c,c2=Client(env['BACKEND_PUBLIC_URL'],token),Client(url2,token)
         contractenv=dict(env,TEST_API_URL=c.url,TEST_TOKEN_FILE=str(RESULT/'cli.token'))
         command(['go','test','-race','./tests/contract'],env=contractenv,timeout=300)
+        rename_stack=c.stack()
+        rename_env=dict(env,TEST_RENAME_STACK_ID=c.call('GET',rename_stack)['id'])
+        command(['go','test','-race','./internal/store','-run','TestRenameWaitingLookup','-count=1'],env=rename_env,timeout=60)
         fixture=contract(c,c2,env);journal(c,c2);web(c,fixture)
         if suite in ('all','web'):
             command(['.dev/web-venv/bin/python','scripts/browser.py',c.url,RESULT/'cli.token',RESULT],env=env,timeout=180)

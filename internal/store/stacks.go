@@ -27,6 +27,11 @@ func (s *Store) Stack(ctx context.Context, tx *sql.Tx, org, project, name string
 		q += ` FOR UPDATE OF s`
 	}
 	e := tx.QueryRowContext(ctx, q, org, project, name).Scan(&st.ID, &st.OrgID, &st.Org, &st.Project, &st.Name, &st.Active, &st.Version, &st.Fence, &st.Tags, &st.Current)
+	if e == nil && lock {
+		// The join may have been evaluated before waiting for the stack lock.
+		// A second READ COMMITTED statement observes any committed rename.
+		return s.Stack(ctx, tx, org, project, name, false)
+	}
 	return st, Translate(e)
 }
 func (s *Store) ExpireActive(ctx context.Context, tx *sql.Tx, st *Stack) error {

@@ -86,3 +86,31 @@ func BenchmarkReplay(b *testing.B) {
 		})
 	}
 }
+
+func TestJournalRefreshRebuildContinues(t *testing.T) {
+	r := apitype.ResourceV3{URN: resource.URN("urn:pulumi:dev::wire::backendtest:index:Item::r"), Type: tokens.Type("backendtest:index:Item")}
+	var envelope apitype.UntypedDeployment
+	json.Unmarshal(pulumicompat.Empty(), &envelope)
+	var base apitype.DeploymentV3
+	json.Unmarshal(envelope.Deployment, &base)
+	base.Resources = []apitype.ResourceV3{r}
+	envelope.Deployment, _ = json.Marshal(base)
+	raw, _ := json.Marshal(envelope)
+	old := int64(0)
+	entries := []apitype.JournalEntry{
+		{Version: 1, Kind: 0, SequenceID: 1, OperationID: 1},
+		{Version: 1, Kind: 3, SequenceID: 2, OperationID: 1, RemoveOld: &old},
+		{Version: 1, Kind: 7, SequenceID: 3},
+		{Version: 1, Kind: 0, SequenceID: 4, OperationID: 2},
+		{Version: 1, Kind: 1, SequenceID: 5, OperationID: 2, State: &r},
+	}
+	if _, e := replay(raw, entries); e != nil {
+		t.Fatal(e)
+	}
+	// Refresh removed the original resource: its pre-rebuild index is invalid.
+	invalid := append([]apitype.JournalEntry{}, entries[:3]...)
+	invalid = append(invalid, apitype.JournalEntry{Version: 1, Kind: 4, SequenceID: 6, State: &r, RemoveOld: &old})
+	if _, e := replay(raw, invalid); e == nil {
+		t.Fatal("stale base index accepted")
+	}
+}

@@ -82,6 +82,13 @@ func (s *Store) Start(ctx context.Context, tx *sql.Tx, a Actor, st *Stack, u *Up
 	if e != nil {
 		return out, e
 	}
+	// Persist the complete baseline as the authoritative head before a new
+	// writer starts, including when the preceding journal has no worker yet.
+	if !u.Dry {
+		if e = s.SetHead(ctx, tx, st.ID, sid); e != nil {
+			return out, e
+		}
+	}
 	version := st.Version
 	if !u.Dry {
 		version++
@@ -192,11 +199,6 @@ func (s *Store) finish(ctx context.Context, tx *sql.Tx, st *Stack, u *Update, st
 		}
 		sid = snapshot
 	}
-	s.afterFinish(tx, func(committed bool) {
-		if committed {
-			s.validators.Delete(u.ID)
-		}
-	})
 	now, e := dbNow(ctx, tx)
 	if e != nil {
 		return e
