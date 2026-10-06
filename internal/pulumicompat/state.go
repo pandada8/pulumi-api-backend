@@ -348,7 +348,7 @@ func ValidateJournal(raw []byte) error {
 			return e
 		}
 		switch typed.Type {
-		case apitype.OperationTypeCreating, apitype.OperationTypeUpdating, apitype.OperationTypeDeleting, apitype.OperationTypeReading:
+		case apitype.OperationTypeCreating, apitype.OperationTypeUpdating, apitype.OperationTypeDeleting, apitype.OperationTypeReading, apitype.OperationType(resource.OperationTypeImporting):
 		default:
 			return fmt.Errorf("invalid journal operation type")
 		}
