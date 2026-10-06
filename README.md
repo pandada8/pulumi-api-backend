@@ -63,6 +63,33 @@ Individual targets: `test-unit`, `test-contract`, `test-integration`, `test-e2e`
 
 Production binaries exclude HTTP fault controls. `build-test` explicitly compiles those controls with `faulttest`, enables race instrumentation, and requires a separate control token. Never deploy a test binary.
 
+## Container releases
+
+The `Container` GitHub Actions workflow builds the production Linux/amd64 image
+on pull requests without logging in or publishing. Pushes to `main` publish
+`ghcr.io/<owner>/<repository>:main`, `:latest`, and `:sha-<full-commit>`.
+Tags beginning with `v` publish the tag and SHA; semantic version tags also
+publish version and major.minor aliases. Prereleases do not update `latest`.
+Here `latest` tracks **main**, not the latest versioned release.
+
+Manual runs publish only when run on `main` or a `v*` tag; other refs build only.
+The image name follows the GitHub repository name automatically, including
+after a rename. The workflow uses `GITHUB_TOKEN` with `packages: write`, checks
+out submodules, and attaches SBOM/provenance metadata. No personal access token
+is needed. Enable Actions/package writes in repository settings; after the first
+push, set GHCR package visibility to public if anonymous pulls are intended.
+
+The container contains application and dependency licenses under
+`/usr/share/licenses/pulumid`. MPL-covered source files are included there too.
+See [third-party notices](THIRD_PARTY_NOTICES.md).
+
+## License
+
+The original code in this project is licensed under the
+[Apache License, Version 2.0](LICENSE). Third-party components retain their
+respective licenses. This project is not affiliated with or endorsed by Pulumi
+Corporation.
+
 ## Operations
 
 See `docs/operations.md` for configuration, token and member administration, backup/restore, TLS, and shutdown. This version supports traditional schema-v3 IaC resources, a single durable PostgreSQL database, and multiple API instances. Remote execution, ESC/cloud config, policy packs, OAuth, delta checkpoints, schema-v4-only features, and cross-organization transfer are not supported. It does not advertise those capabilities.
