@@ -92,7 +92,7 @@ def main():
                 raise ValueError('Unsupported state features')
             resources, pending = dep.get('resources', []), dep.get('pending_operations', [])
             for r in resources + [op['resource'] for op in pending]:
-                urn = r['urn'].split('::')
+                urn = r['urn'].split('::', 3)
                 if len(urn) != 4 or urn[0] != 'urn:pulumi:' + name or urn[1] != project:
                     raise ValueError('Source URN does not match destination identity')
             path = '/api/stacks/' + '/'.join(urllib.parse.quote(v, safe='') for v in [a.org, project, name])
