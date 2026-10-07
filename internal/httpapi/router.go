@@ -640,7 +640,9 @@ func writeError(w http.ResponseWriter, e error) {
 func body(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	compressed, expanded := int64(1<<20), int64(4<<20)
 	if strings.Contains(r.URL.Path, "checkpoint") || strings.HasSuffix(r.URL.Path, "/import") {
-		compressed, expanded = 32<<20, 128<<20
+		// Real DIY states can exceed 32 MiB even after gzip (for example,
+		// encrypted CRD schemas). Keep the expanded bound unchanged.
+		compressed, expanded = 64<<20, 128<<20
 	}
 	if strings.HasSuffix(r.URL.Path, "/journalentries") {
 		compressed, expanded = 16<<20, 32<<20
