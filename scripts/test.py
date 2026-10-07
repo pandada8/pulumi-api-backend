@@ -420,6 +420,9 @@ def main():
         rename_env=dict(env,TEST_RENAME_STACK_ID=c.call('GET',rename_stack)['id'])
         command(['go','test','-race','./internal/store','-run','TestRenameWaitingLookup','-count=1'],env=rename_env,timeout=60)
         fixture=contract(c,c2,env);journal(c,c2);web(c,fixture)
+        import revisions_test
+        revisions_test.run(c,c2,env,command,ROOT,CONTAINER,deployment)
+        revisions_test.migration(env,command,ROOT,CONTAINER,deployment)
         if suite in ('all','web'):
             command(['.dev/web-venv/bin/python','scripts/browser.py',c.url,RESULT/'cli.token',RESULT],env=env,timeout=180)
         # An API process restart cannot lose an ACK. Second instance stays available.

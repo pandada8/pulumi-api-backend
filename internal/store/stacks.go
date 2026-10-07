@@ -135,6 +135,12 @@ func (s *Store) CreateStack(ctx context.Context, tx *sql.Tx, a Actor, org, proje
 	if e = s.SetHead(ctx, tx, id, sid); e != nil {
 		return e
 	}
+	if _, e = tx.ExecContext(ctx, `INSERT INTO state_revisions(id,stack_id,snapshot_id) VALUES($1,$1,$2)`, id, sid); e != nil {
+		return e
+	}
+	if _, e = tx.ExecContext(ctx, `UPDATE stacks SET current_revision=$1 WHERE id=$1`, id); e != nil {
+		return e
+	}
 	wrapped, e := core.Seal(core.Purpose(s.Config.Master, "wrap"), core.Random(), wrapAAD(id, 1))
 	if e != nil {
 		return e
@@ -219,6 +225,17 @@ func (s *Store) Import(ctx context.Context, tx *sql.Tx, a Actor, st Stack, raw [
 		return "", e
 	}
 	e = s.SetHead(ctx, tx, st.ID, sid)
+	if e != nil {
+		return "", e
+	}
+	var parent string
+	if e = tx.QueryRowContext(ctx, `SELECT current_revision FROM stacks WHERE id=$1`, st.ID).Scan(&parent); e != nil {
+		return "", e
+	}
+	if _, e = tx.ExecContext(ctx, `UPDATE updates SET base_revision=$2 WHERE id=$1`, id, parent); e != nil {
+		return "", e
+	}
+	e = s.publishRevision(ctx, tx, st.ID, id, parent, sid, "", 0)
 	return id, e
 }
 func (s *Store) Rename(ctx context.Context, tx *sql.Tx, a Actor, st Stack, project, name string) error {

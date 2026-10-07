@@ -101,7 +101,14 @@ func Diff(before, after []byte) ([]ResourceDiff, error) {
 						keys[k] = true
 					}
 					for k := range keys {
-						walk(path+"/"+strings.ReplaceAll(strings.ReplaceAll(k, "~", "~0"), "/", "~1"), am[k], bm[k])
+						child := path + "/" + strings.ReplaceAll(strings.ReplaceAll(k, "~", "~0"), "/", "~1")
+						av, aexists := am[k]
+						bv, bexists := bm[k]
+						if aexists != bexists {
+							diff.Paths = append(diff.Paths, child)
+						} else {
+							walk(child, av, bv)
+						}
 					}
 				} else {
 					diff.Paths = append(diff.Paths, path)

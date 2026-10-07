@@ -88,3 +88,12 @@ func TestFeatureScope(t *testing.T) {
 		t.Fatal("v4 resource feature accepted")
 	}
 }
+
+func TestDiffMissingVersusNull(t *testing.T) {
+	a := []byte(`{"deployment":{"resources":[{"urn":"x","outputs":{}}]}}`)
+	b := []byte(`{"deployment":{"resources":[{"urn":"x","outputs":{"value":null}}]}}`)
+	d, e := Diff(a, b)
+	if e != nil || len(d) != 1 || len(d[0].Paths) != 1 || d[0].Paths[0] != "/outputs/value" {
+		t.Fatalf("missing vs null: %#v %v", d, e)
+	}
+}

@@ -39,7 +39,7 @@ func (s *Store) CreateUpdate(ctx context.Context, tx *sql.Tx, a Actor, st Stack,
 	id := uuid.NewString()
 	raw, _ := json.Marshal(req)
 	dry := kind == "preview" || req.Options.DryRun
-	_, e := tx.ExecContext(ctx, `INSERT INTO updates(id,stack_id,actor_token_id,kind,status,mode,dry_run,request) VALUES($1,$2,$3,$4,'created','none',$5,$6)`, id, st.ID, a.TokenID, kind, dry, raw)
+	_, e := tx.ExecContext(ctx, `INSERT INTO updates(id,stack_id,actor_token_id,kind,status,mode,dry_run,request,created_epoch) VALUES($1,$2,$3,$4,'created','none',$5,$6,(SELECT activation_epoch FROM stacks WHERE id=$2))`, id, st.ID, a.TokenID, kind, dry, raw)
 	return id, e
 }
 func (s *Store) Start(ctx context.Context, tx *sql.Tx, a Actor, st *Stack, u *Update, req apitype.StartUpdateRequest) (apitype.StartUpdateResponse, error) {
@@ -70,6 +70,17 @@ func (s *Store) Start(ctx context.Context, tx *sql.Tx, a Actor, st *Stack, u *Up
 	}
 	if u.Status != "created" || st.Active != "" {
 		return out, Fail(409, "Update in progress or terminal")
+	}
+	var epoch, createdEpoch int64
+	var parent string
+	if e := tx.QueryRowContext(ctx, `SELECT s.activation_epoch,u.created_epoch,s.current_revision FROM stacks s JOIN updates u ON u.stack_id=s.id WHERE s.id=$1 AND u.id=$2`, st.ID, u.ID).Scan(&epoch, &createdEpoch, &parent); e != nil {
+		return out, e
+	}
+	if epoch != createdEpoch {
+		return out, Fail(409, "State activated since update creation; start a new operation")
+	}
+	if _, e := tx.ExecContext(ctx, `UPDATE updates SET base_revision=$2 WHERE id=$1`, u.ID, parent); e != nil {
+		return out, e
 	}
 	base, invalid, e := s.Head(ctx, tx, st.ID)
 	if e != nil {
@@ -210,6 +221,21 @@ func (s *Store) finish(ctx context.Context, tx *sql.Tx, st *Stack, u *Update, st
 	_, e = tx.ExecContext(ctx, `UPDATE updates SET status=$2,complete_status=$2,reason=$3,final_snapshot_id=$4,ended_at=$5,event_closed_at=$6 WHERE id=$1`, u.ID, status, reason, sid, now, closed)
 	if e != nil {
 		return e
+	}
+	if !u.Dry {
+		var parent string
+		if e = tx.QueryRowContext(ctx, `SELECT base_revision FROM updates WHERE id=$1`, u.ID).Scan(&parent); e != nil {
+			return e
+		}
+		snapshot, journal, upto := u.Base, "", int64(0)
+		if u.Mode == "journal" {
+			journal, upto = u.ID, u.JournalCount
+		} else {
+			snapshot = sid.(string)
+		}
+		if e = s.publishRevision(ctx, tx, st.ID, u.ID, parent, snapshot, journal, upto); e != nil {
+			return e
+		}
 	}
 	_, e = tx.ExecContext(ctx, `UPDATE stacks SET active_update_id=NULL,fence=fence+1 WHERE id=$1 AND active_update_id=$2`, st.ID, u.ID)
 	return e

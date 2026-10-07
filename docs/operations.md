@@ -1,6 +1,6 @@
 # Operations
 
-`backend` provides `serve`, `worker`, and `migrate`; `worker --once` processes one durable materialization job and sweeps expired/revoked updates. Migrations hold a PostgreSQL advisory lock and repeat as a no-op. Serve requires migration version 1 and never migrates automatically.
+`backend` provides `serve`, `worker`, and `migrate`; `worker --once` processes one durable materialization job and sweeps expired/revoked updates. Migrations hold a PostgreSQL advisory lock and repeat as a no-op. Serve requires migration version 2 and never migrates automatically.
 
 Configuration: `BACKEND_DATABASE_URL`, `BACKEND_PUBLIC_URL`, `BACKEND_MASTER_KEY_FILE` are required. The key must contain exactly 32 random bytes, mode 0600, and be readable by the container UID. `BACKEND_CONSOLE_URL` defaults to PUBLIC_URL. LISTEN defaults to `:8080`. URLs are origin URLs without paths. HTTP requires `BACKEND_DEV_HTTP=true`. Journal negotiation defaults off. `BACKEND_ENABLE_DELTA=true` fails startup. DATABASE_URL is never logged. The process uses 20 database connections; provision PostgreSQL connection capacity for all instances and workers.
 
@@ -37,3 +37,5 @@ scripts/restore.sh ./backup-YYYYMMDD pulumid-restore-EXAMPLE --isolated
 The script verifies the manifest, restores, rotates the service generation, and freezes old running updates before any traffic is admitted. Verify authoritative exports and old secret decryption on the isolated target before switching traffic. The automated test does this in a separate database and confirms the source is untouched. A logical backup is a point-in-time view of backend records; rolling it back does not roll back cloud resources. Reconcile against actual cloud resources if a stale backup is used.
 
 Stop development services with `docker compose down`; this keeps the database volume. `docker compose down -v` deletes that database and is not a routine shutdown command. No service is left running by automated tests. Root-key loss prevents service secrets decryption; backing up only PostgreSQL is insufficient.
+
+Schema v2 and state activation: see `version-tree.md`. Stop writers/API/worker before migrating; active updates cause migration to fail. Backups created by the bundled script now require schema 2.

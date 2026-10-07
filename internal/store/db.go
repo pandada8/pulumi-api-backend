@@ -12,7 +12,7 @@ import (
 	"sync"
 )
 
-//go:embed schema.sql
+//go:embed schema.sql schema_v2.sql
 var migrations embed.FS
 
 type Store struct {
@@ -64,7 +64,7 @@ func (s *Store) Ready(ctx context.Context) error {
 	if e != nil {
 		return e
 	}
-	if v != 1 {
+	if v != 2 {
 		return fmt.Errorf("unsupported migration version %d", v)
 	}
 	return nil
@@ -83,12 +83,23 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if e = c.QueryRowContext(ctx, "SELECT to_regclass('schema_migrations') IS NOT NULL").Scan(&found); e != nil {
 		return e
 	}
-	if found {
-		return s.Ready(ctx)
+	if !found {
+		raw, _ := migrations.ReadFile("schema.sql")
+		if _, e = c.ExecContext(ctx, string(raw)); e != nil {
+			return e
+		}
 	}
-	raw, _ := migrations.ReadFile("schema.sql")
-	_, e = c.ExecContext(ctx, string(raw))
-	return e
+	var version int
+	if e = c.QueryRowContext(ctx, "SELECT max(version) FROM schema_migrations").Scan(&version); e != nil {
+		return e
+	}
+	if version == 1 {
+		raw, _ := migrations.ReadFile("schema_v2.sql")
+		if _, e = c.ExecContext(ctx, string(raw)); e != nil {
+			return e
+		}
+	}
+	return s.Ready(ctx)
 }
 func (s *Store) Tx(ctx context.Context, fn func(*sql.Tx) error) error {
 	tx, e := s.DB.BeginTx(ctx, nil)

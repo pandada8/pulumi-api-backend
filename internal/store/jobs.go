@@ -97,7 +97,7 @@ func (s *Store) materialize(ctx context.Context, id string) error {
 		if e != nil {
 			return e
 		}
-		_, e = tx.ExecContext(ctx, `INSERT INTO materializations(stack_id,update_id,upto,replayer_version,snapshot_id) VALUES($1,$2,$3,'21bf19ba',$4) ON CONFLICT DO NOTHING`, stack, id, u.JournalCount, sid)
+		_, e = tx.ExecContext(ctx, `INSERT INTO materializations(stack_id,update_id,upto,replayer_version,snapshot_id) VALUES($1,$2,$3,'21bf19ba-revision-v2',$4) ON CONFLICT DO NOTHING`, stack, id, u.JournalCount, sid)
 		if e != nil {
 			return e
 		}

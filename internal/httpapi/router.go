@@ -361,6 +361,88 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return store.Fail(403, "Invalid update token scope")
 		}
 		switch action {
+		case "revisions":
+			if r.Method != "GET" {
+				return store.Fail(405, "Method not allowed")
+			}
+			if len(parts) == 6 {
+				offset := 0
+				if q := r.URL.Query().Get("offset"); q != "" {
+					offset, e = strconv.Atoi(q)
+					if e != nil {
+						return store.Fail(400, "Invalid offset")
+					}
+				}
+				response, e = a.Store.RevisionTree(ctx, tx, st, offset)
+				return e
+			}
+			if len(parts) == 7 {
+				if _, e = uuid.Parse(parts[6]); e != nil {
+					return store.Fail(400, "Invalid revision ID")
+				}
+				var b []byte
+				b, _, e = a.Store.RevisionState(ctx, tx, st.ID, parts[6])
+				if e != nil {
+					return e
+				}
+				response = json.RawMessage(b)
+				return nil
+			}
+		case "revision-diff":
+			if r.Method != "GET" || len(parts) != 6 {
+				return store.Fail(405, "Method not allowed")
+			}
+			ids := []string{r.URL.Query().Get("from"), r.URL.Query().Get("to")}
+			states := make([][]byte, 2)
+			for i, id := range ids {
+				if _, e = uuid.Parse(id); e != nil {
+					return store.Fail(400, "Invalid revision ID")
+				}
+				states[i], _, e = a.Store.RevisionState(ctx, tx, st.ID, id)
+				if e != nil {
+					return e
+				}
+			}
+			response, e = pulumicompat.Diff(states[0], states[1])
+			return e
+		case "activate":
+			if r.Method != "POST" || len(parts) != 6 {
+				return store.Fail(405, "Method not allowed")
+			}
+			var req store.ActivateRequest
+			if e = decode(&req); e != nil {
+				return e
+			}
+			response, e = a.Store.Activate(ctx, tx, actor, st, req)
+			return e
+		case "activations":
+			if r.Method != "GET" || len(parts) != 6 {
+				return store.Fail(405, "Method not allowed")
+			}
+			offset := 0
+			if q := r.URL.Query().Get("offset"); q != "" {
+				offset, e = strconv.Atoi(q)
+				if e != nil || offset < 0 {
+					return store.Fail(400, "Invalid offset")
+				}
+			}
+			rows, err := tx.QueryContext(ctx, `SELECT x.request_id,x.from_revision,x.target_revision,x.reason,x.created_at,u.version,x.update_id,p.login FROM state_activations x JOIN updates u ON u.id=x.update_id JOIN api_tokens t ON t.id=x.actor_token_id JOIN principals p ON p.id=t.principal_id WHERE x.stack_id=$1 ORDER BY u.version LIMIT 100 OFFSET $2`, st.ID, offset)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			items := []map[string]any{}
+			for rows.Next() {
+				var request, from, to, reason, id, login string
+				var at time.Time
+				var version int64
+				if e = rows.Scan(&request, &from, &to, &reason, &at, &version, &id, &login); e != nil {
+					return e
+				}
+				items = append(items, map[string]any{"requestID": request, "from": from, "target": to, "reason": reason, "createdAt": at, "version": version, "updateID": id, "actor": login})
+			}
+			response = items
+			return rows.Err()
 		case "update", "preview", "refresh", "destroy":
 			if len(parts) != 6 || r.Method != "POST" {
 				break

@@ -10,6 +10,7 @@ import (
 	"github.com/pandada8/pulumi-api-backend/internal/pulumicompat"
 	"github.com/pulumi/pulumi/pkg/v3/backend"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"sort"
 )
 
 // replay validates references before calling upstream code, which assumes trusted engine inputs.
@@ -53,6 +54,14 @@ func replay(raw []byte, entries []apitype.JournalEntry) (out []byte, err error) 
 	if dep.Version != 3 || len(dep.Features) > 0 {
 		return nil, Fail(422, "Journal produced unsupported features")
 	}
+	// Upstream stamps time.Now() during replay. A fixed history node must not
+	// change merely because it is read or materialized later.
+	dep.Deployment.Manifest.Time = base.Manifest.Time
+	sort.SliceStable(dep.Deployment.PendingOperations, func(i, j int) bool {
+		a, _ := json.Marshal(dep.Deployment.PendingOperations[i])
+		b, _ := json.Marshal(dep.Deployment.PendingOperations[j])
+		return string(a) < string(b)
+	})
 	b, err := json.Marshal(dep.Deployment)
 	if err != nil {
 		return nil, err

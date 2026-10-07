@@ -99,3 +99,5 @@ Corporation.
 ## Operations
 
 See `docs/operations.md` for configuration, token and member administration, backup/restore, TLS, and shutdown. This version supports traditional schema-v3 IaC resources, a single durable PostgreSQL database, and multiple API instances. Remote execution, ESC/cloud config, policy packs, OAuth, delta checkpoints, schema-v4-only features, and cross-organization transfer are not supported. It does not advertise those capabilities.
+
+State history: see [immutable version trees and activation](docs/version-tree.md) for the operator CLI, API, concurrency rules and schema-v2 upgrade procedure.
