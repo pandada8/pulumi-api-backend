@@ -193,6 +193,7 @@ def journal(c,c2):
     assert len(c2.call('GET',s+'/export')['deployment']['pending_operations'])==1
     success={'version':1,'kind':1,'sequenceID':11,'operationID':1,'removeOld':None,'removeNew':None,'state':dict(r,id='world-r',outputs={'value':'one'})}
     c.call('PATCH',u+'/journalentries',{'entries':[success]},lease=t,status=204)
+    assert next(x for x in c2.call('GET','/api/user/stacks')['stacks'] if x['stackName']==s.split('/')[-1])['resourceCount']==1
     outputs={'version':1,'kind':4,'sequenceID':13,'operationID':2,'removeOld':None,'removeNew':1,'state':dict(r,id='world-r',outputs={'value':'two'})}
     c2.call('PATCH',u+'/journalentries',{'entries':[outputs,outputs]},lease=t,status=204)
     c.call('PATCH',u+'/journalentries',{'entries':[outputs]},lease=t,status=204)
@@ -418,8 +419,10 @@ def main():
         command(['go','test','-race','./tests/contract'],env=contractenv,timeout=300)
         rename_stack=c.stack()
         rename_env=dict(env,TEST_RENAME_STACK_ID=c.call('GET',rename_stack)['id'])
-        command(['go','test','-race','./internal/store','-run','TestRenameWaitingLookup','-count=1'],env=rename_env,timeout=60)
+        command(['go','test','-race','./internal/store','-run','TestRenameWaitingLookup|TestListingDoesNotReadSnapshots','-count=1'],env=rename_env,timeout=60)
         fixture=contract(c,c2,env);journal(c,c2);web(c,fixture)
+        import listing_test
+        listing_test.run(c,c2,deployment)
         import revisions_test
         revisions_test.run(c,c2,env,command,ROOT,CONTAINER,deployment)
         revisions_test.migration(env,command,ROOT,CONTAINER,deployment)

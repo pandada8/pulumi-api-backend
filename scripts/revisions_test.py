@@ -124,7 +124,9 @@ def migration(env, command, root, container, deployment):
     import subprocess
     command(['docker','exec',container,'createdb','-U','postgres','legacy'])
     uid,oid,sid,p0,p1,p2,u1,u2,tid=[str(uuid.uuid4()) for _ in range(9)]
-    raw=json.dumps(deployment()).replace("'","''")
+    state=deployment()
+    state['deployment']['resources']=[{'urn':'urn:pulumi:legacy::wire::pkg:index:Thing::r','type':'pkg:index:Thing','custom':True,'id':'r'}]
+    raw=json.dumps(state).replace("'","''")
     sql=(root/'internal/store/schema.sql').read_text()+f'''
 INSERT INTO principals(id,login,display_name) VALUES('{uid}','legacy','legacy');
 INSERT INTO organizations(id,name) VALUES('{oid}','legacy');
@@ -144,8 +146,12 @@ UPDATE stacks SET active_update_id='{u2}' WHERE id='{sid}';
     legacyenv=dict(env,BACKEND_DATABASE_URL=env['BACKEND_DATABASE_URL'].replace('/backend?','/legacy?'))
     assert command(['bin/backend','migrate'],env=legacyenv,check=False).returncode!=0
     command(['docker','exec',container,'psql','-U','postgres','-d','legacy','-c','UPDATE stacks SET active_update_id=NULL'])
+    # Exercise an existing v2 installation, including the v3 active-writer guard.
+    subprocess.run(['docker','exec','-i',container,'psql','-U','postgres','-d','legacy','-v','ON_ERROR_STOP=1'],input=(root/'internal/store/schema_v2.sql').read_text()+f"UPDATE stacks SET active_update_id='{u2}';",text=True,check=True,stdout=subprocess.DEVNULL)
+    assert command(['bin/backend','migrate'],env=legacyenv,check=False).returncode!=0
+    command(['docker','exec',container,'psql','-U','postgres','-d','legacy','-c','UPDATE stacks SET active_update_id=NULL'])
     command(['bin/backend','migrate'],env=legacyenv);command(['bin/backend','migrate'],env=legacyenv)
-    q=f"SELECT count(*)=3 AND bool_and((id='{u1}' AND parent_id='{sid}') OR (id='{u2}' AND parent_id='{u1}') OR (id='{sid}' AND parent_id IS NULL)) FROM state_revisions; SELECT current_revision='{u2}' AND last_version=2 FROM stacks;"
+    q=f"SELECT count(*)=3 AND bool_and((id='{u1}' AND parent_id='{sid}') OR (id='{u2}' AND parent_id='{u1}') OR (id='{sid}' AND parent_id IS NULL)) FROM state_revisions; SELECT current_revision='{u2}' AND last_version=2 FROM stacks; SELECT bool_and(resource_count=1 AND convert_from(raw_bytes,'UTF8')='{raw}' AND sha256=decode(repeat('ab',32),'hex')) FROM snapshots; SELECT resource_count=1 FROM stack_heads;"
     r=command(['docker','exec',container,'psql','-U','postgres','-d','legacy','-Atc',q])
-    assert r.stdout.decode().strip()=='t\nt',r.stdout
-    print('Schema v1 history backfill, active update guard and migration idempotency: PASS')
+    assert r.stdout.decode().strip()=='t\nt\nt\nt',r.stdout
+    print('Schema v1/v2 backfill, active update guards, unchanged state bytes and migration idempotency: PASS')

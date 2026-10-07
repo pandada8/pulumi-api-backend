@@ -8,7 +8,7 @@ target=${2:?target container required}
 python3 - "$backup" <<'PY'
 import hashlib,json,pathlib,sys
 p=pathlib.Path(sys.argv[1]);m=json.loads((p/'manifest.json').read_text())
-assert m['schema']==2
+assert m['schema']==3
 assert m['databaseSHA256']==hashlib.sha256((p/'database.dump').read_bytes()).hexdigest()
 assert m['masterKeyID']==hashlib.sha256(pathlib.Path(__import__('os').environ['BACKEND_MASTER_KEY_FILE']).read_bytes()).hexdigest()
 PY

@@ -1,6 +1,6 @@
 # Operations
 
-`backend` provides `serve`, `worker`, and `migrate`; `worker --once` processes one durable materialization job and sweeps expired/revoked updates. Migrations hold a PostgreSQL advisory lock and repeat as a no-op. Serve requires migration version 2 and never migrates automatically.
+`backend` provides `serve`, `worker`, and `migrate`; `worker --once` processes one durable materialization job and sweeps expired/revoked updates. Migrations hold a PostgreSQL advisory lock and repeat as a no-op. Serve requires migration version 3 and never migrates automatically.
 
 Configuration: `BACKEND_DATABASE_URL`, `BACKEND_PUBLIC_URL`, `BACKEND_MASTER_KEY_FILE` are required. The key must contain exactly 32 random bytes, mode 0600, and be readable by the container UID. `BACKEND_CONSOLE_URL` defaults to PUBLIC_URL. LISTEN defaults to `:8080`. URLs are origin URLs without paths. HTTP requires `BACKEND_DEV_HTTP=true`. Journal negotiation defaults off. `BACKEND_ENABLE_DELTA=true` fails startup. DATABASE_URL is never logged. The process uses 20 database connections; provision PostgreSQL connection capacity for all instances and workers.
 
@@ -38,4 +38,11 @@ The script verifies the manifest, restores, rotates the service generation, and 
 
 Stop development services with `docker compose down`; this keeps the database volume. `docker compose down -v` deletes that database and is not a routine shutdown command. No service is left running by automated tests. Root-key loss prevents service secrets decryption; backing up only PostgreSQL is insufficient.
 
-Schema v2 and state activation: see `version-tree.md`. Stop writers/API/worker before migrating; active updates cause migration to fail. Backups created by the bundled script now require schema 2.
+Schema v2 and state activation: see `version-tree.md`. Stop writers/API/worker before migrating; active updates cause migration to fail. Restore with the bundled script requires schema 3; migrate older dumps in an isolated database first.
+
+Schema v3 stores a resource count on each snapshot and current head. Existing
+snapshots are parsed once during migration; their bytes and hashes are preserved.
+Imports, checkpoints, journal publications, materialization and state activation
+update counts in the same transaction as the head. Stack listing reads metadata
+without loading full states. Legacy journal heads use replay until materialized;
+new journal heads carry counts. Stop API/worker before migrating.

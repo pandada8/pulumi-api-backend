@@ -172,7 +172,8 @@ func (s *Store) AppendJournal(ctx context.Context, tx *sql.Tx, st Stack, u Updat
 	for _, i := range newItems {
 		candidate = append(candidate, i.entry)
 	}
-	if _, e = replay(raw, candidate); e != nil {
+	candidateRaw, e := replay(raw, candidate)
+	if e != nil {
 		if _, ok := e.(*Error); ok {
 			return e
 		}
@@ -190,6 +191,6 @@ func (s *Store) AppendJournal(ctx context.Context, tx *sql.Tx, st Stack, u Updat
 	if e != nil {
 		return e
 	}
-	_, e = tx.ExecContext(ctx, `UPDATE stack_heads SET snapshot_id=$2,journal_update_id=$3,journal_upto=$4,generation=generation+1 WHERE stack_id=$1`, st.ID, u.Base, u.ID, count)
+	_, e = tx.ExecContext(ctx, `UPDATE stack_heads SET snapshot_id=$2,journal_update_id=$3,journal_upto=$4,resource_count=$5,generation=generation+1 WHERE stack_id=$1`, st.ID, u.Base, u.ID, count, pulumicompat.ResourceCount(candidateRaw))
 	return e
 }

@@ -66,11 +66,11 @@ func (s *Store) ExpireActive(ctx context.Context, tx *sql.Tx, st *Stack) error {
 }
 func (s *Store) InsertSnapshot(ctx context.Context, tx *sql.Tx, id string, raw []byte, invalid bool) (string, error) {
 	sid := uuid.NewString()
-	_, e := tx.ExecContext(ctx, `INSERT INTO snapshots(id,stack_id,schema_version,raw_bytes,sha256,is_invalid) VALUES($1,$2,3,$3,$4,$5)`, sid, id, raw, core.Digest(raw), invalid)
+	_, e := tx.ExecContext(ctx, `INSERT INTO snapshots(id,stack_id,schema_version,raw_bytes,sha256,is_invalid,resource_count) VALUES($1,$2,3,$3,$4,$5,$6)`, sid, id, raw, core.Digest(raw), invalid, pulumicompat.ResourceCount(raw))
 	return sid, e
 }
 func (s *Store) SetHead(ctx context.Context, tx *sql.Tx, id, snapshot string) error {
-	_, e := tx.ExecContext(ctx, `INSERT INTO stack_heads(stack_id,snapshot_id) VALUES($1,$2) ON CONFLICT(stack_id) DO UPDATE SET snapshot_id=$2,journal_update_id=NULL,journal_upto=0,generation=stack_heads.generation+1`, id, snapshot)
+	_, e := tx.ExecContext(ctx, `INSERT INTO stack_heads(stack_id,snapshot_id,resource_count) SELECT $1,$2,resource_count FROM snapshots WHERE id=$2 ON CONFLICT(stack_id) DO UPDATE SET snapshot_id=$2,resource_count=EXCLUDED.resource_count,journal_update_id=NULL,journal_upto=0,generation=stack_heads.generation+1`, id, snapshot)
 	return e
 }
 func (s *Store) Head(ctx context.Context, tx *sql.Tx, id string) ([]byte, bool, error) {
@@ -152,15 +152,18 @@ func (s *Store) CreateStack(ctx context.Context, tx *sql.Tx, a Actor, org, proje
 	return s.ValidateServiceSecrets(ctx, tx, Stack{ID: id, OrgID: oid, Org: org, Project: project, Name: req.StackName}, raw)
 }
 func (s *Store) ListStacks(ctx context.Context, tx *sql.Tx, a Actor, org, project, tag, value string) ([]map[string]any, error) {
-	rows, e := tx.QueryContext(ctx, `SELECT s.id,o.name,n.project,n.name FROM stacks s JOIN stack_names n ON n.stack_id=s.id AND n.is_current JOIN organizations o ON o.id=s.org_id JOIN memberships m ON m.org_id=o.id WHERE m.principal_id=$1 AND s.deleted_at IS NULL AND ($2='' OR o.name=$2) AND ($3='' OR n.project=$3) AND ($4='' OR s.tags->>$4=$5) ORDER BY s.id`, a.PrincipalID, org, project, tag, value)
+	rows, e := tx.QueryContext(ctx, `SELECT s.id,o.name,n.project,n.name,h.resource_count FROM stacks s JOIN stack_names n ON n.stack_id=s.id AND n.is_current JOIN organizations o ON o.id=s.org_id JOIN memberships m ON m.org_id=o.id JOIN stack_heads h ON h.stack_id=s.id WHERE m.principal_id=$1 AND s.deleted_at IS NULL AND ($2='' OR o.name=$2) AND ($3='' OR n.project=$3) AND ($4='' OR s.tags->>$4=$5) ORDER BY s.id`, a.PrincipalID, org, project, tag, value)
 	if e != nil {
 		return nil, e
 	}
-	type item struct{ id, org, project, name string }
+	type item struct {
+		id, org, project, name string
+		count                  sql.NullInt64
+	}
 	items := []item{}
 	for rows.Next() {
 		var i item
-		if e = rows.Scan(&i.id, &i.org, &i.project, &i.name); e != nil {
+		if e = rows.Scan(&i.id, &i.org, &i.project, &i.name, &i.count); e != nil {
 			rows.Close()
 			return nil, e
 		}
@@ -173,11 +176,17 @@ func (s *Store) ListStacks(ctx context.Context, tx *sql.Tx, a Actor, org, projec
 	}
 	out := []map[string]any{}
 	for _, i := range items {
-		raw, _, e := s.Head(ctx, tx, i.id)
-		if e != nil {
-			return nil, e
+		count := i.count.Int64
+		if !i.count.Valid {
+			// Only pre-v3 journal heads lack a summary. Never treat them as
+			// their base snapshot: journal entries may add/remove resources.
+			raw, _, e := s.Head(ctx, tx, i.id)
+			if e != nil {
+				return nil, e
+			}
+			count = int64(pulumicompat.ResourceCount(raw))
 		}
-		out = append(out, map[string]any{"id": i.id, "orgName": i.org, "projectName": i.project, "stackName": i.name, "resourceCount": pulumicompat.ResourceCount(raw), "links": map[string]string{"self": s.Config.ConsoleURL + "/" + i.org + "/" + i.project + "/" + i.name}})
+		out = append(out, map[string]any{"id": i.id, "orgName": i.org, "projectName": i.project, "stackName": i.name, "resourceCount": count, "links": map[string]string{"self": s.Config.ConsoleURL + "/" + i.org + "/" + i.project + "/" + i.name}})
 	}
 	return out, nil
 }

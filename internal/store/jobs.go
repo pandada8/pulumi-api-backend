@@ -105,7 +105,7 @@ func (s *Store) materialize(ctx context.Context, id string) error {
 		if e != nil {
 			return e
 		}
-		_, e = tx.ExecContext(ctx, `UPDATE stack_heads SET snapshot_id=$4,journal_update_id=NULL,journal_upto=0,generation=generation+1 WHERE stack_id=$1 AND journal_update_id=$2 AND journal_upto=$3`, stack, id, u.JournalCount, sid)
+		_, e = tx.ExecContext(ctx, `UPDATE stack_heads SET snapshot_id=$4,resource_count=(SELECT resource_count FROM snapshots WHERE id=$4),journal_update_id=NULL,journal_upto=0,generation=generation+1 WHERE stack_id=$1 AND journal_update_id=$2 AND journal_upto=$3`, stack, id, u.JournalCount, sid)
 		return e
 	})
 }
