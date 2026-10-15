@@ -101,3 +101,5 @@ Corporation.
 See `docs/operations.md` for configuration, token and member administration, backup/restore, TLS, and shutdown. This version supports schema-v3 and schema-v4 IaC state (views, resource hooks, taint, replaceWith, refreshBeforeUpdate, and snippets-prototype), a single durable PostgreSQL database, and multiple API instances. Remote execution, ESC/cloud config, policy packs, OAuth, delta checkpoints, and cross-organization transfer are not supported. It does not advertise those capabilities.
 
 State history: see [immutable version trees and activation](docs/version-tree.md) for the operator CLI, API, concurrency rules and schema-v2 upgrade procedure.
+
+The embedded React/shadcn console shows stacks as an organization → project → stack tree, with search, resource inspection, update messages and logs. Run `make console-dev` for an isolated local PostgreSQL + API development environment; see [console development](docs/console.md).

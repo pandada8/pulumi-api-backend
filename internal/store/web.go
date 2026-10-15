@@ -191,3 +191,11 @@ func (s *Store) PageStacks(ctx context.Context, tx *sql.Tx, a Actor, filter, tok
 	c.Position = filtered[99]["id"].(string)
 	return filtered[:100], core.EncodeCursor(core.Purpose(s.Config.Master, "cursor"), c), nil
 }
+
+// RefreshSessionCSRF is called only after same-origin and session validation.
+// It lets a reloaded console log out without persisting credentials in storage.
+func (s *Store) RefreshSessionCSRF(ctx context.Context, tx *sql.Tx, sid string) (string, error) {
+	csrf := core.RandomToken()
+	_, e := tx.ExecContext(ctx, `UPDATE web_sessions SET csrf_digest=$2 WHERE digest=$1`, core.Digest([]byte(sid)), core.Digest([]byte(csrf)))
+	return csrf, e
+}

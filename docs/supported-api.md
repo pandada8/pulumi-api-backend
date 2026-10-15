@@ -1,6 +1,6 @@
 # Implemented compatibility
 
-Pinned source: `21bf19ba40dba5dce0f565e8c614b5d8aa4dbb17`, deployment schema 3, journal 1, REST Accept `application/vnd.pulumi+9`. The explicit CLI/manifest build label is 3.246.0. No patch is made to upstream CLI, engine, Go SDK, or language host.
+Pinned source: `21bf19ba40dba5dce0f565e8c614b5d8aa4dbb17`, deployment schemas 3/4, journal 1, REST Accept `application/vnd.pulumi+9`. The explicit CLI/manifest build label is 3.246.0. No patch is made to upstream CLI, engine, Go SDK, or language host.
 
 Implemented: user/default organization/capabilities/CLI version; stack list/create/get/delete, project HEAD, tags, current and historical export, import, same-organization rename; create update/preview/refresh/destroy; Start/Renew/Complete/Cancel; full checkpoints, journal entries, structured and legacy events, history/latest; individual and batch service encryption/decryption and audit endpoints; web login/session/CSRF/logout, stack/resource/history and CLI stack/update/preview pages, web data APIs; expiry worker, journal materialization, migration, bootstrap/members/tokens/recovery generation, database backup and isolated restore.
 
@@ -14,7 +14,7 @@ Differences from the original design that remain material:
 
 - Core transaction orchestration lives in `internal/store`; handlers do no SQL. `internal/core` contains pure crypto/cursor helpers. This is a smaller package layout than the design document.
 - Start, journal cold-reference loading, rename, and materialization hold the stack row lock during preparation/replay. The design's lock-free candidate plus generation retry optimization is not implemented. This is correct under concurrent writers but can return 503 on large-stack contention.
-- The console is a read-only server-rendered inspector with resource/history tables and event polling. Web resource/list and Pulumi API pagination are implemented. Resource diffs compare URN+ID+delete marker and show paths without property values. The HTML stack list supports project filtering and signed next-page links.
+- The console is a read-only embedded React SPA with an organization/project/stack tree, resource/history tables and event polling. Web resource/list and Pulumi API pagination are implemented. Resource diffs compare URN+ID+delete marker and show paths without property values. The explorer follows signed cursor pages and supports search, project/organization filters and keyboard navigation.
 - Events history derives `resourceChanges` only from a stored engine summary event. Missing statistics are omitted rather than fabricated. Dedicated replay/job/WAL/RSS metrics are not provided by the HTTP metric endpoint.
 - Materializer claims do not renew beyond 120 seconds. Database uniqueness/CAS protects publication if a duplicate worker claims an expired job, but long jobs can duplicate computation. Database statement timeout is 30 seconds.
 - API benchmarks cover full vs journal storage with a real delay proxy. They are not the fixed provider/CLI/S3-DIY benchmark acceptance matrix, and no S3 superiority claim is made.

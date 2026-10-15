@@ -70,3 +70,13 @@
 - 迁移测试覆盖 v1/v2/v3 升至 v4、活动更新阻断、重复迁移和原始 snapshot 字节/hash 保持。
 
 上述为状态存储及 API 兼容验证；本次未运行各个 v4 feature 的真实 Pulumi provider 生命周期端到端测试。此前记录中的 schema-v4 未实现说明仅适用于此前版本。
+
+## Embedded SPA console（2026-10-15）
+
+基于 `536cee2` 的本次工作区实现：React/TypeScript/Vite、shadcn/ui、Go embed。开发环境使用独立 PostgreSQL 17 容器和 128 个示例 stack。
+
+- `go test -race ./internal/...` 通过；后续 `go test -race ./internal/httpapi ./internal/store` 通过，覆盖嵌入资源、缓存边界和控制台安全行为。
+- `npm --prefix web run build` 与 TypeScript 检查通过。`docker build --target console -t pulumid-console-build:dev .` 通过；本次验证了新增 Node 构建阶段，没有重新构建完整生产镜像。
+- `python3 scripts/test.py web` 通过，最终证据 run：`pulumid-22a9ce4bd06b`。包含原有 API/迁移/租约回归，以及 Chromium 的登录、105 个新增 stack 的跨页搜索、折叠/展开、严格 CSP 下的筛选菜单、CLI 深链接、secret 脱敏、XSS、事件日志、手机布局/导航与刷新后退出。
+- 本地启动脚本 `scripts/console-dev.py --port 18081` 验证通过：构建、迁移、启动并服务 SPA，结束后停止该测试 API，保留本地数据库。
+- 协作浏览器检查了 1440px 桌面和 390px 手机布局；没有横向溢出，浏览器存储不保存 token，secret 输出显示 `[secret]`。

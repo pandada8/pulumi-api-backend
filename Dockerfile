@@ -1,3 +1,10 @@
+FROM node:24-bookworm-slim AS console
+WORKDIR /src/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web ./
+RUN npm run build
+
 FROM golang:1.26.5-bookworm AS build
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -6,6 +13,7 @@ COPY third_party/pulumi/sdk/go.mod third_party/pulumi/sdk/go.sum third_party/pul
 RUN go mod download
 COPY cmd cmd
 COPY internal internal
+COPY --from=console /src/internal/httpapi/console/dist internal/httpapi/console/dist
 COPY LICENSE THIRD_PARTY_NOTICES.md ./
 COPY third_party/pulumi/LICENSE third_party/pulumi/LICENSE
 COPY third_party/pulumi/pkg third_party/pulumi/pkg
@@ -24,6 +32,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/backend /out/backendctl /app/
 COPY --from=build /out/licenses /usr/share/licenses/pulumi-api-backend/
+COPY --from=console /src/internal/httpapi/console/dist/third-party-licenses.txt /usr/share/licenses/pulumi-api-backend/frontend.txt
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 USER 65532:65532
 WORKDIR /app

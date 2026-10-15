@@ -1,11 +1,11 @@
 SHELL := /bin/bash
 .SHELLFLAGS := -euo pipefail -c
 LDFLAGS := -X github.com/pulumi/pulumi/sdk/v3/go/common/version.Version=3.246.0
-.PHONY: dev-init build build-binaries build-test image cli migrate bootstrap smoke dev-world test-unit test-contract test-integration test-e2e test-security test-web test-fault test-restore bench verify
+.PHONY: web-build web-dev console-dev dev-init build build-binaries build-test image cli migrate bootstrap smoke dev-world test-unit test-contract test-integration test-e2e test-security test-web test-fault test-restore bench verify
 
 dev-init:
 	python3 scripts/dev-init.py
-build-binaries:
+build-binaries: web-build
 	mkdir -p bin test-results
 	go build -ldflags '$(LDFLAGS)' -o bin/backend ./cmd/backend
 	go build -o bin/backendctl ./cmd/backendctl
@@ -16,7 +16,7 @@ cli:
 image:
 	docker compose build api
 build: build-binaries cli image
-build-test:
+build-test: web-build
 	mkdir -p bin test-results
 	go build -race -tags faulttest -ldflags '$(LDFLAGS)' -o bin/backend ./cmd/backend
 	go build -race -o bin/backendctl ./cmd/backendctl
@@ -54,3 +54,12 @@ verify:
 	python3 scripts/test.py all
 web-deps:
 	scripts/web-deps.sh
+
+web-build:
+	npm --prefix web ci --no-fund --no-audit
+	npm --prefix web run build
+web-dev:
+	npm --prefix web run dev
+
+console-dev:
+	python3 scripts/console-dev.py

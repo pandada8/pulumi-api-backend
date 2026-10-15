@@ -30,3 +30,5 @@ publishing a release.
 
 This is an independent project, not affiliated with or endorsed by Pulumi
 Corporation. Pulumi is a trademark of Pulumi Corporation.
+
+The embedded console includes React, React Router, TanStack Query, Radix UI, Lucide and other npm dependencies, plus shadcn/ui component source. Their notices are generated from the installed dependency tree and `web/LICENSE-shadcn` during `npm run build`. The notices are embedded at `/third-party-licenses.txt` and included in container images as `/usr/share/licenses/pulumi-api-backend/frontend.txt`.

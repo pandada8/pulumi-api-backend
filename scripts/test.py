@@ -249,6 +249,20 @@ def web(c,fixture):
     req('DELETE','/console/api/session',origin=c.url,expected=401)
     req('DELETE','/console/api/session',origin=c.url,csrf=csrf)
     req('GET','/console/api/stacks',expected=401)
+    req('GET','/console/api/session',expected=401)
+    b,_=req('POST','/console/api/session',{'token':c.token},origin=c.url)
+    previous=json.loads(b)['data']['csrfToken']
+    b,_=req('GET','/console/api/session');assert json.loads(b)['data']['login']=='admin'
+    req('POST','/console/api/session/refresh',origin='https://evil.test',expected=403)
+    b,_=req('POST','/console/api/session/refresh',origin=c.url)
+    refreshed=json.loads(b)['data']['csrfToken']
+    req('DELETE','/console/api/session',origin=c.url,csrf=previous,expected=401)
+    b,_=req('GET','/console/api/resolve/'+s.removeprefix('/api/stacks/'));assert b'canary-secret' not in b
+    b,_=req('GET','/console/api/stacks/'+sid+'/history?page=1');assert b'canary-secret' not in b
+    req('GET','/console/api/stacks/'+sid+'/history?page=0',expected=400)
+    req('GET','/console/api/stacks/'+sid+'/unknown',expected=404)
+    req('DELETE','/console/api/session',origin=c.url,csrf=refreshed)
+    req('GET','/console/api/session',expected=401)
 
 def e2e(c,env,mode):
     home=RESULT/('home-'+mode+'-'+uuid.uuid4().hex[:6]);home.mkdir()
