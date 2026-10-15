@@ -12,7 +12,7 @@ import (
 	"sync"
 )
 
-//go:embed schema.sql schema_v2.sql schema_v3.sql
+//go:embed schema.sql schema_v2.sql schema_v3.sql schema_v4.sql
 var migrations embed.FS
 
 type Store struct {
@@ -64,7 +64,7 @@ func (s *Store) Ready(ctx context.Context) error {
 	if e != nil {
 		return e
 	}
-	if v != 3 {
+	if v != 4 {
 		return fmt.Errorf("unsupported migration version %d", v)
 	}
 	return nil
@@ -105,7 +105,15 @@ func (s *Store) Migrate(ctx context.Context) error {
 		if _, e = c.ExecContext(ctx, string(raw)); e != nil {
 			return e
 		}
+		version = 3
 	}
+	if version == 3 {
+		raw, _ := migrations.ReadFile("schema_v4.sql")
+		if _, e = c.ExecContext(ctx, string(raw)); e != nil {
+			return e
+		}
+	}
+
 	return s.Ready(ctx)
 }
 func (s *Store) Tx(ctx context.Context, fn func(*sql.Tx) error) error {

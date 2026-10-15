@@ -150,6 +150,10 @@ UPDATE stacks SET active_update_id='{u2}' WHERE id='{sid}';
     subprocess.run(['docker','exec','-i',container,'psql','-U','postgres','-d','legacy','-v','ON_ERROR_STOP=1'],input=(root/'internal/store/schema_v2.sql').read_text()+f"UPDATE stacks SET active_update_id='{u2}';",text=True,check=True,stdout=subprocess.DEVNULL)
     assert command(['bin/backend','migrate'],env=legacyenv,check=False).returncode!=0
     command(['docker','exec',container,'psql','-U','postgres','-d','legacy','-c','UPDATE stacks SET active_update_id=NULL'])
+    # Exercise the v4 guard separately on a v3 database.
+    subprocess.run(['docker','exec','-i',container,'psql','-U','postgres','-d','legacy','-v','ON_ERROR_STOP=1'],input=(root/'internal/store/schema_v3.sql').read_text()+f"UPDATE stacks SET active_update_id='{u2}';",text=True,check=True,stdout=subprocess.DEVNULL)
+    assert command(['bin/backend','migrate'],env=legacyenv,check=False).returncode!=0
+    command(['docker','exec',container,'psql','-U','postgres','-d','legacy','-c','UPDATE stacks SET active_update_id=NULL'])
     command(['bin/backend','migrate'],env=legacyenv);command(['bin/backend','migrate'],env=legacyenv)
     q=f"SELECT count(*)=3 AND bool_and((id='{u1}' AND parent_id='{sid}') OR (id='{u2}' AND parent_id='{u1}') OR (id='{sid}' AND parent_id IS NULL)) FROM state_revisions; SELECT current_revision='{u2}' AND last_version=2 FROM stacks; SELECT bool_and(resource_count=1 AND convert_from(raw_bytes,'UTF8')='{raw}' AND sha256=decode(repeat('ab',32),'hex')) FROM snapshots; SELECT resource_count=1 FROM stack_heads;"
     r=command(['docker','exec',container,'psql','-U','postgres','-d','legacy','-Atc',q])

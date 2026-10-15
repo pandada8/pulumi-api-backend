@@ -421,6 +421,8 @@ def main():
         rename_env=dict(env,TEST_RENAME_STACK_ID=c.call('GET',rename_stack)['id'])
         command(['go','test','-race','./internal/store','-run','TestRenameWaitingLookup|TestListingDoesNotReadSnapshots','-count=1'],env=rename_env,timeout=60)
         fixture=contract(c,c2,env);journal(c,c2);web(c,fixture)
+        import v4_test
+        v4_test.run(c,c2,env,command,CONTAINER,deployment)
         import listing_test
         listing_test.run(c,c2,deployment)
         import revisions_test

@@ -80,13 +80,28 @@ func Empty() []byte {
 	raw, _ := json.Marshal(apitype.UntypedDeployment{Version: 3, Deployment: b})
 	return raw
 }
+
+// ValidateVersion checks the envelope independently of its deployment payload.
+func ValidateVersion(version int, features []string) error {
+	if version != 3 && version != 4 || version == 3 && len(features) > 0 {
+		return fmt.Errorf("unsupported deployment schema/features")
+	}
+	for _, feature := range features {
+		switch feature {
+		case "refreshBeforeUpdate", "views", "hooks", "taint", "replaceWith", "snippets-prototype":
+		default:
+			return fmt.Errorf("unsupported deployment feature: %s", feature)
+		}
+	}
+	return nil
+}
 func Validate(raw []byte) error {
 	var u apitype.UntypedDeployment
 	if e := Decode(raw, &u); e != nil {
 		return e
 	}
-	if u.Version != 3 || len(u.Features) > 0 {
-		return fmt.Errorf("unsupported deployment schema/features")
+	if e := ValidateVersion(u.Version, u.Features); e != nil {
+		return e
 	}
 	var d map[string]any
 	if e := Decode(u.Deployment, &d); e != nil {
@@ -96,7 +111,10 @@ func Validate(raw []byte) error {
 		return fmt.Errorf("deployment manifest is required")
 	}
 	check := func(m map[string]any) error {
-		for _, k := range []string{"snippets", "views", "hooks", "taint", "replaceWith", "refreshBeforeUpdate"} {
+		if u.Version == 4 {
+			return nil
+		}
+		for _, k := range []string{"snippets", "views", "hooks", "viewOf", "resourceHooks", "taint", "replaceWith", "refreshBeforeUpdate"} {
 			if _, ok := m[k]; ok {
 				return fmt.Errorf("unsupported v4 feature: %s", k)
 			}
@@ -235,7 +253,7 @@ func Rename(raw []byte, org, project, name, newProject, newName, publicURL strin
 		}
 	}
 	rewriteResource := func(r map[string]any) {
-		for _, k := range []string{"urn", "parent", "deletedWith"} {
+		for _, k := range []string{"urn", "parent", "deletedWith", "viewOf"} {
 			if v, ok := r[k].(string); ok {
 				r[k] = rewrite(v)
 			}
@@ -248,10 +266,12 @@ func Rename(raw []byte, org, project, name, newProject, newName, publicURL strin
 				}
 			}
 		}
-		if a, ok := r["dependencies"].([]any); ok {
-			for i, v := range a {
-				if s, ok := v.(string); ok {
-					a[i] = rewrite(s)
+		for _, field := range []string{"dependencies", "replaceWith"} {
+			if a, ok := r[field].([]any); ok {
+				for i, v := range a {
+					if s, ok := v.(string); ok {
+						a[i] = rewrite(s)
+					}
 				}
 			}
 		}
@@ -281,6 +301,20 @@ func Rename(raw []byte, org, project, name, newProject, newName, publicURL strin
 			}
 		}
 	}
+	if snippets, ok := d["snippets"].([]any); ok {
+		for _, snippet := range snippets {
+			if m, ok := snippet.(map[string]any); ok {
+				if references, ok := m["references"].(map[string]any); ok {
+					for k, v := range references {
+						if urn, ok := v.(string); ok {
+							references[k] = rewrite(urn)
+						}
+					}
+				}
+			}
+		}
+	}
+
 	if sp, ok := d["secrets_providers"].(map[string]any); ok && sp["type"] == "service" {
 		if state, ok := sp["state"].(map[string]any); ok {
 			state["url"] = publicURL
@@ -318,11 +352,6 @@ func ValidateJournal(raw []byte) error {
 		if e := Decode(raw, &resource); e != nil {
 			return e
 		}
-		for _, k := range []string{"snippets", "views", "hooks", "taint", "replaceWith", "refreshBeforeUpdate"} {
-			if _, ok := resource[k]; ok {
-				return fmt.Errorf("unsupported v4 journal field %s", k)
-			}
-		}
 		var typed apitype.ResourceV3
 		if e := json.Unmarshal(raw, &typed); e != nil {
 			return e
@@ -357,7 +386,7 @@ func ValidateJournal(raw []byte) error {
 		}
 	}
 	if b := m["newSnapshot"]; len(b) > 0 && string(b) != "null" {
-		return Validate(append(append([]byte(`{"version":3,"deployment":`), b...), '}'))
+		return Validate(append(append([]byte(`{"version":4,"deployment":`), b...), '}'))
 	}
 	return nil
 }

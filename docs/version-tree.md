@@ -132,3 +132,5 @@ changes. Backup/restore scripts now label and require schema 2.
 
 Storage is still PostgreSQL only. No delta protocol, GC, retention pruning or OSS
 archive is enabled by this change; abandoned branches continue occupying storage.
+
+Deployment schema 3 and 4 can coexist in a revision tree. Activation preserves the selected envelope, feature list, and payload; update history version numbers are independent of deployment schema versions. Database migration v4 widens the snapshot schema constraint without rewriting stored bytes or hashes. Stop API writers and workers and finish/cancel active updates before migrating.

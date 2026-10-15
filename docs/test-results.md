@@ -60,3 +60,13 @@
 已执行 `go test ./internal/store -run '^$' -bench '^BenchmarkReplay$' -benchtime=2s -cpuprofile=test-results/journal.cpu -memprofile=test-results/journal.mem`，退出码 0。随后 `go tool pprof -top -nodecount=12 test-results/journal.cpu` 退出码 0。独立重放微基准：1,000 资源约 61.4ms/op、30.6MB 分配；10,000 资源约 585.8ms/op、307.3MB 分配、约 192 万次分配。CPU top 12 占样本约 75%，主要是 encoding/json 字符串扫描、Decoder.readValue、unquoteBytes、appendCompact/checkValid 和内存搬运。它解释了 export 热读仍然昂贵：当前每次冷式重放都重复解析/校验/序列化完整 deployment。此 profile 不包含数据库和 HTTP，不能据此量化 journal ACK 的 SQL 时间。原始 profile 和文本输出随附件交付。
 
 测试后的检查确认没有本仓库 test-results/PULUMI_HOME 的存活子进程，所有本轮专属 PostgreSQL/Compose 容器均已清理。最终源码和 Git 提交在指定本地仓库中；未创建或推送远端仓库。
+
+## Deployment schema v4 验证（2026-10-15）
+
+- `go test -race ./internal/...` 通过；新增 v4 字段校验、未知 feature 拒绝、结构化 rename 和 journal feature/snippet 保留测试。
+- `go test -race ./internal/store -run TestReplay -count=1` 通过；包含 journal Write 清空旧 snippets。
+- `make build-test` 通过。
+- `python3 scripts/test.py contract` 通过，证据 run：`pulumid-87bbe3eebc3a`。使用隔离 PostgreSQL 和两个 API 实例，覆盖 v4 import 原文字节保持及 schema_version=4、checkpoint/version/features、journal 重放及物化、重命名引用、v3/v4 revision 激活切换，以及旧版协议/权限/租约/历史回归。
+- 迁移测试覆盖 v1/v2/v3 升至 v4、活动更新阻断、重复迁移和原始 snapshot 字节/hash 保持。
+
+上述为状态存储及 API 兼容验证；本次未运行各个 v4 feature 的真实 Pulumi provider 生命周期端到端测试。此前记录中的 schema-v4 未实现说明仅适用于此前版本。

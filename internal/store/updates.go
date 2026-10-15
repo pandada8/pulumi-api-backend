@@ -274,8 +274,8 @@ func (s *Store) SaveFull(ctx context.Context, tx *sql.Tx, st Stack, u Update, to
 	if u.Mode != "full" {
 		return Fail(409, "Checkpoint requires full mode")
 	}
-	if req.Version != 3 || len(req.Features) > 0 {
-		return Fail(422, "Unsupported checkpoint version/features")
+	if e := pulumicompat.ValidateVersion(req.Version, req.Features); e != nil {
+		return Fail(422, e.Error())
 	}
 	var raw []byte
 	if len(req.Deployment) == 0 || string(req.Deployment) == "null" {
@@ -289,7 +289,7 @@ func (s *Store) SaveFull(ctx context.Context, tx *sql.Tx, st Stack, u Update, to
 		}
 	} else {
 		var e error
-		raw = append(append([]byte(`{"version":3,"deployment":`), req.Deployment...), '}')
+		raw, e = json.Marshal(apitype.UntypedDeployment{Version: req.Version, Features: req.Features, Deployment: req.Deployment})
 		if e != nil {
 			return e
 		}

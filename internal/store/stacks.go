@@ -65,8 +65,12 @@ func (s *Store) ExpireActive(ctx context.Context, tx *sql.Tx, st *Stack) error {
 	return nil
 }
 func (s *Store) InsertSnapshot(ctx context.Context, tx *sql.Tx, id string, raw []byte, invalid bool) (string, error) {
+	var deployment apitype.UntypedDeployment
+	if e := json.Unmarshal(raw, &deployment); e != nil {
+		return "", e
+	}
 	sid := uuid.NewString()
-	_, e := tx.ExecContext(ctx, `INSERT INTO snapshots(id,stack_id,schema_version,raw_bytes,sha256,is_invalid,resource_count) VALUES($1,$2,3,$3,$4,$5,$6)`, sid, id, raw, core.Digest(raw), invalid, pulumicompat.ResourceCount(raw))
+	_, e := tx.ExecContext(ctx, `INSERT INTO snapshots(id,stack_id,schema_version,raw_bytes,sha256,is_invalid,resource_count) VALUES($1,$2,$3,$4,$5,$6,$7)`, sid, id, deployment.Version, raw, core.Digest(raw), invalid, pulumicompat.ResourceCount(raw))
 	return sid, e
 }
 func (s *Store) SetHead(ctx context.Context, tx *sql.Tx, id, snapshot string) error {

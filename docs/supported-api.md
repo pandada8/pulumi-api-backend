@@ -8,7 +8,7 @@ Wire errors are JSON `code,message`. Successful writes with no object return 204
 
 State/lease semantics include stack UUID binding, source-token revocation, database locking across instances, monotonic history versions, dryRun/preview isolation, retry-stable Start/Complete/Renew, cancellation/expiry fencing, and persisted partial state. Journal identity is sequenceID, replay order is server ingestion order, and resource references use operationID/old index. The implementation reuses the pinned upstream `backend.NewJournalReplayer`; no URN-based replacement of that algorithm is used.
 
-Unsupported features return 422 or an unimplemented route 404: schema-v4 resource features, nonempty teams/cloud config, delta checkpoints, remote execution, ESC, policy, OAuth, and cross-org transfer. Only `batch-encrypt` is advertised. Existing journal heads remain readable with negotiation disabled.
+Unsupported features return 422 or an unimplemented route 404: nonempty teams/cloud config, delta checkpoints, remote execution, ESC, policy, OAuth, and cross-org transfer. Only `batch-encrypt` is advertised. Existing journal heads remain readable with negotiation disabled.
 
 Differences from the original design that remain material:
 
@@ -21,3 +21,5 @@ Differences from the original design that remain material:
 - Fault tests cover pre-lock cancellation, before-commit failure/rollback, committed response loss, persisted create-before-CLI-kill, database/API restart, and materialization CAS. The design's entire individually named fault-control matrix and real 300-second renewal-duration test are not implemented.
 
 The repository includes the original implementation specification for traceability; it must not be read as evidence that every design acceptance target has passed. `docs/test-results.md` reports actual executions.
+
+Deployment envelopes support schema 3 (no features) and schema 4 with the pinned upstream feature set: `views`, `hooks`, `taint`, `replaceWith`, `refreshBeforeUpdate`, and `snippets-prototype`. Unknown envelope features return 422. Full checkpoints preserve version/features; journal replay promotes v3 when features appear and preserves v4 envelopes and snippets. Imports retain their original bytes. Rename rewrites `viewOf`, `replaceWith`, and snippet references while preserving application strings. Empty stacks still use schema 3. Database migration version 4 accepts snapshots of either schema.

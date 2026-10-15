@@ -97,3 +97,52 @@ func TestDiffMissingVersusNull(t *testing.T) {
 		t.Fatalf("missing vs null: %#v %v", d, e)
 	}
 }
+
+func TestDeploymentV4(t *testing.T) {
+	const urn = "urn:pulumi:dev::wire::pkg:index:Thing::r"
+	for _, field := range []string{`"viewOf":"` + urn + `"`, `"resourceHooks":{"beforeCreate":["hook"]}`, `"taint":true`, `"replaceWith":["` + urn + `"]`, `"refreshBeforeUpdate":true`} {
+		raw := []byte(`{"version":4,"features":["views","hooks","taint","replaceWith","refreshBeforeUpdate"],"deployment":{"manifest":{},"resources":[{"urn":"` + urn + `","type":"pkg:index:Thing",` + field + `}]}}`)
+		if e := Validate(raw); e != nil {
+			t.Fatal(field, e)
+		}
+		var m map[string]any
+		Decode(raw, &m)
+		m["version"] = 3
+		delete(m, "features")
+		downgraded, _ := json.Marshal(m)
+		if Validate(downgraded) == nil {
+			t.Fatal("v4 field accepted in v3", field)
+		}
+	}
+	for _, envelope := range []string{`"version":5`, `"version":3,"features":["views"]`, `"version":4,"features":["future"]`} {
+		if Validate([]byte(`{`+envelope+`,"deployment":{"manifest":{}}}`)) == nil {
+			t.Fatal("unsupported envelope", envelope)
+		}
+	}
+	if Validate([]byte(`{"version":4,"deployment":{"manifest":{},"resources":[{"urn":"`+urn+`","type":"pkg:index:Thing","taint":"yes"}]}}`)) == nil {
+		t.Fatal("invalid feature type accepted")
+	}
+}
+
+func TestRenameV4References(t *testing.T) {
+	const urn = "urn:pulumi:dev::wire::pkg:index:Thing::r"
+	const newURN = "urn:pulumi:prod::newproject::pkg:index:Thing::r"
+	r := map[string]any{"urn": urn, "type": "pkg:index:Thing", "viewOf": urn, "replaceWith": []any{urn}, "inputs": map[string]any{"plain": urn}}
+	raw, _ := json.Marshal(map[string]any{"version": 4, "features": []string{"views", "replaceWith", "snippets-prototype"}, "deployment": map[string]any{"manifest": map[string]any{}, "resources": []any{r}, "pending_operations": []any{map[string]any{"type": "creating", "resource": r}}, "snippets": []any{map[string]any{"name": "s", "code": urn, "references": map[string]any{"r": urn}}}}})
+	out, e := Rename(raw, "demo", "wire", "dev", "newproject", "prod", "https://api.test")
+	if e != nil {
+		t.Fatal(e)
+	}
+	var m map[string]any
+	Decode(out, &m)
+	d := m["deployment"].(map[string]any)
+	for _, r := range []map[string]any{d["resources"].([]any)[0].(map[string]any), d["pending_operations"].([]any)[0].(map[string]any)["resource"].(map[string]any)} {
+		if r["viewOf"] != newURN || r["replaceWith"].([]any)[0] != newURN || r["inputs"].(map[string]any)["plain"] != urn {
+			t.Fatal("reference rewrite", r)
+		}
+	}
+	snippet := d["snippets"].([]any)[0].(map[string]any)
+	if snippet["references"].(map[string]any)["r"] != newURN || snippet["code"] != urn || len(m["features"].([]any)) != 3 {
+		t.Fatal("snippet or envelope changed", m)
+	}
+}

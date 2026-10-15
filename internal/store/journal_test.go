@@ -114,3 +114,73 @@ func TestJournalRefreshRebuildContinues(t *testing.T) {
 		t.Fatal("stale base index accepted")
 	}
 }
+
+func TestReplayV4FeaturesAndSnippets(t *testing.T) {
+	const urn = resource.URN("urn:pulumi:dev::wire::pkg:index:Thing::r")
+	r := apitype.ResourceV3{URN: urn, Type: "pkg:index:Thing", ViewOf: urn, ReplaceWith: []resource.URN{urn}, Taint: true, RefreshBeforeUpdate: true, ResourceHooks: map[resource.HookType][]string{"beforeCreate": {"hook"}}}
+	snippet := apitype.SnippetV1{Name: "s", Type: "pkg:index:Thing", Code: "value = 42", References: map[string]string{"r": string(urn)}}
+	var base apitype.UntypedDeployment
+	json.Unmarshal(pulumicompat.Empty(), &base)
+	var deployment apitype.DeploymentV3
+	json.Unmarshal(base.Deployment, &deployment)
+	deployment.Snippets = []apitype.SnippetV1{snippet}
+	base.Version, base.Features = 4, []string{"snippets-prototype"}
+	base.Deployment, _ = json.Marshal(deployment)
+	raw, _ := json.Marshal(base)
+	entries := []apitype.JournalEntry{{Version: 1, Kind: 0, SequenceID: 1, OperationID: 1, Operation: &apitype.OperationV2{Type: apitype.OperationTypeCreating, Resource: r}}, {Version: 1, Kind: 1, SequenceID: 2, OperationID: 1, State: &r}, {Version: 1, Kind: 7, SequenceID: 3}}
+	for _, entries := range [][]apitype.JournalEntry{entries[:1], entries, {{Version: 1, Kind: 5, SequenceID: 1, NewSnapshot: &apitype.DeploymentV3{Manifest: deployment.Manifest, Snippets: []apitype.SnippetV1{snippet}, Resources: []apitype.ResourceV3{r}}}}} {
+		for _, entry := range entries {
+			b, _ := json.Marshal(entry)
+			if e := pulumicompat.ValidateJournal(b); e != nil {
+				t.Fatal(e)
+			}
+		}
+		out, e := replay(raw, entries)
+		if e != nil {
+			t.Fatal(e)
+		}
+		var u apitype.UntypedDeployment
+		json.Unmarshal(out, &u)
+		var d apitype.DeploymentV3
+		json.Unmarshal(u.Deployment, &d)
+		if u.Version != 4 || len(u.Features) != 6 || len(d.Snippets) != 1 || d.Snippets[0].References["r"] != string(urn) {
+			t.Fatalf("lost features or snippets: %s", out)
+		}
+		again, e := replay(raw, entries)
+		if e != nil || string(out) != string(again) {
+			t.Fatal("replay not deterministic", e)
+		}
+	}
+	// A v3 base can acquire v4 features through journal entries.
+	out, e := replay(pulumicompat.Empty(), entries[:2])
+	if e != nil {
+		t.Fatal(e)
+	}
+	var u apitype.UntypedDeployment
+	json.Unmarshal(out, &u)
+	if u.Version != 4 || len(u.Features) != 5 {
+		t.Fatalf("v3 upgrade lost features: %s", out)
+	}
+}
+
+func TestReplayWriteClearsSnippets(t *testing.T) {
+	var u apitype.UntypedDeployment
+	json.Unmarshal(pulumicompat.Empty(), &u)
+	var d apitype.DeploymentV3
+	json.Unmarshal(u.Deployment, &d)
+	d.Snippets = []apitype.SnippetV1{{Name: "old"}}
+	u.Version, u.Features = 4, []string{"snippets-prototype"}
+	u.Deployment, _ = json.Marshal(d)
+	raw, _ := json.Marshal(u)
+	d.Snippets = nil
+	out, err := replay(raw, []apitype.JournalEntry{{Version: 1, Kind: 5, SequenceID: 1, NewSnapshot: &d}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	json.Unmarshal(out, &u)
+	d = apitype.DeploymentV3{}
+	json.Unmarshal(u.Deployment, &d)
+	if u.Version != 4 || len(d.Snippets) != 0 {
+		t.Fatal("write did not clear snippets", string(out))
+	}
+}

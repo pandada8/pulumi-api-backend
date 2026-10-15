@@ -20,6 +20,9 @@ func replay(raw []byte, entries []apitype.JournalEntry) (out []byte, err error) 
 			err = fmt.Errorf("journal replayer panic: %v", r)
 		}
 	}()
+	if err = pulumicompat.Validate(raw); err != nil {
+		return nil, err
+	}
 	var u apitype.UntypedDeployment
 	if err = json.Unmarshal(raw, &u); err != nil {
 		return
@@ -29,6 +32,8 @@ func replay(raw []byte, entries []apitype.JournalEntry) (out []byte, err error) 
 		return
 	}
 	r := backend.NewJournalReplayer(&base)
+	// The pinned upstream replayer omits snippets from generated deployments.
+	snippets := base.Snippets
 	validator := newValidator(len(base.Resources))
 	for _, entry := range entries {
 		if err = validator.add(entry); err != nil {
@@ -36,6 +41,9 @@ func replay(raw []byte, entries []apitype.JournalEntry) (out []byte, err error) 
 		}
 		if err = r.Add(entry); err != nil {
 			return nil, err
+		}
+		if entry.Kind == apitype.JournalEntryKindWrite {
+			snippets = entry.NewSnapshot.Snippets
 		}
 		if entry.Kind == apitype.JournalEntryKindRebuiltBaseState {
 			deployment, e := r.GenerateDeployment()
@@ -51,8 +59,21 @@ func replay(raw []byte, entries []apitype.JournalEntry) (out []byte, err error) 
 	if err != nil {
 		return nil, err
 	}
-	if dep.Version != 3 || len(dep.Features) > 0 {
-		return nil, Fail(422, "Journal produced unsupported features")
+	dep.Deployment.Snippets = snippets
+	features := map[string]bool{}
+	for _, feature := range append(u.Features, dep.Features...) {
+		features[feature] = true
+	}
+	if len(snippets) > 0 {
+		features["snippets-prototype"] = true
+	}
+	dep.Features = nil
+	for feature := range features {
+		dep.Features = append(dep.Features, feature)
+	}
+	sort.Strings(dep.Features)
+	if u.Version == 4 || len(dep.Features) > 0 {
+		dep.Version = 4
 	}
 	// Upstream stamps time.Now() during replay. A fixed history node must not
 	// change merely because it is read or materialized later.
@@ -66,7 +87,7 @@ func replay(raw []byte, entries []apitype.JournalEntry) (out []byte, err error) 
 	if err != nil {
 		return nil, err
 	}
-	out, err = json.Marshal(apitype.UntypedDeployment{Version: 3, Deployment: b})
+	out, err = json.Marshal(apitype.UntypedDeployment{Version: dep.Version, Features: dep.Features, Deployment: b})
 	if err == nil {
 		err = pulumicompat.Validate(out)
 	}

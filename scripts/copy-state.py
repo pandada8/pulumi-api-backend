@@ -83,13 +83,15 @@ def main():
                     raise ValueError('Invalid stack/project name')
             raw = f.read_bytes()
             state = json.loads(raw)
-            if state.get('version') != 3:
-                raise ValueError('Only schema v3 is supported')
+            if state.get('version') not in (3, 4):
+                raise ValueError('Only schema v3/v4 is supported')
+            features = state.get('features', [])
+            supported = {'views', 'hooks', 'taint', 'replaceWith', 'refreshBeforeUpdate', 'snippets-prototype'}
+            if (state['version'] == 3 and features) or set(features) - supported:
+                raise ValueError('Unsupported state features')
             dep = state['deployment']
             if dep.get('secrets_providers', {}).get('type') not in (None, 'passphrase'):
                 raise ValueError('Secrets provider needs a separate migration plan')
-            if dep.get('features'):
-                raise ValueError('Unsupported state features')
             resources, pending = dep.get('resources', []), dep.get('pending_operations', [])
             for r in resources + [op['resource'] for op in pending]:
                 urn = r['urn'].split('::', 3)
