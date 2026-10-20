@@ -156,18 +156,19 @@ func (s *Store) CreateStack(ctx context.Context, tx *sql.Tx, a Actor, org, proje
 	return s.ValidateServiceSecrets(ctx, tx, Stack{ID: id, OrgID: oid, Org: org, Project: project, Name: req.StackName}, raw)
 }
 func (s *Store) ListStacks(ctx context.Context, tx *sql.Tx, a Actor, org, project, tag, value string) ([]map[string]any, error) {
-	rows, e := tx.QueryContext(ctx, `SELECT s.id,o.name,n.project,n.name,h.resource_count FROM stacks s JOIN stack_names n ON n.stack_id=s.id AND n.is_current JOIN organizations o ON o.id=s.org_id JOIN memberships m ON m.org_id=o.id JOIN stack_heads h ON h.stack_id=s.id WHERE m.principal_id=$1 AND s.deleted_at IS NULL AND ($2='' OR o.name=$2) AND ($3='' OR n.project=$3) AND ($4='' OR s.tags->>$4=$5) ORDER BY s.id`, a.PrincipalID, org, project, tag, value)
+	rows, e := tx.QueryContext(ctx, `SELECT s.id,o.name,n.project,n.name,h.resource_count,(SELECT u.started_at FROM updates u WHERE u.stack_id=s.id AND NOT u.dry_run AND u.started_at IS NOT NULL ORDER BY u.version DESC NULLS LAST LIMIT 1) FROM stacks s JOIN stack_names n ON n.stack_id=s.id AND n.is_current JOIN organizations o ON o.id=s.org_id JOIN memberships m ON m.org_id=o.id JOIN stack_heads h ON h.stack_id=s.id WHERE m.principal_id=$1 AND s.deleted_at IS NULL AND ($2='' OR o.name=$2) AND ($3='' OR n.project=$3) AND ($4='' OR s.tags->>$4=$5) ORDER BY s.id`, a.PrincipalID, org, project, tag, value)
 	if e != nil {
 		return nil, e
 	}
 	type item struct {
 		id, org, project, name string
 		count                  sql.NullInt64
+		lastUpdate             sql.NullTime
 	}
 	items := []item{}
 	for rows.Next() {
 		var i item
-		if e = rows.Scan(&i.id, &i.org, &i.project, &i.name, &i.count); e != nil {
+		if e = rows.Scan(&i.id, &i.org, &i.project, &i.name, &i.count, &i.lastUpdate); e != nil {
 			rows.Close()
 			return nil, e
 		}
@@ -190,7 +191,12 @@ func (s *Store) ListStacks(ctx context.Context, tx *sql.Tx, a Actor, org, projec
 			}
 			count = int64(pulumicompat.ResourceCount(raw))
 		}
-		out = append(out, map[string]any{"id": i.id, "orgName": i.org, "projectName": i.project, "stackName": i.name, "resourceCount": count, "links": map[string]string{"self": s.Config.ConsoleURL + "/" + i.org + "/" + i.project + "/" + i.name}})
+		summary := map[string]any{"id": i.id, "orgName": i.org, "projectName": i.project, "stackName": i.name, "resourceCount": count, "links": map[string]string{"self": s.Config.ConsoleURL + "/" + i.org + "/" + i.project + "/" + i.name}}
+		// The protocol expects Unix seconds for the latest started non-preview update.
+		if i.lastUpdate.Valid {
+			summary["lastUpdate"] = i.lastUpdate.Time.Unix()
+		}
+		out = append(out, summary)
 	}
 	return out, nil
 }

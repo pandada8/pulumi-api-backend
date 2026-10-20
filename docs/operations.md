@@ -4,6 +4,20 @@
 
 Configuration: `BACKEND_DATABASE_URL`, `BACKEND_PUBLIC_URL`, `BACKEND_MASTER_KEY_FILE` are required. The key must contain exactly 32 random bytes, mode 0600, and be readable by the container UID. `BACKEND_CONSOLE_URL` defaults to PUBLIC_URL. LISTEN defaults to `:8080`. URLs are origin URLs without paths. HTTP requires `BACKEND_DEV_HTTP=true`. Journal negotiation defaults off. `BACKEND_ENABLE_DELTA=true` fails startup. DATABASE_URL is never logged. The process uses 20 database connections; provision PostgreSQL connection capacity for all instances and workers.
 
+For CLI console links with a custom backend hostname or IP address, set
+`PULUMI_CONSOLE_DOMAIN` in the client environment to the console host (and port,
+if needed), without a scheme or path. The CLI retains the backend URL's scheme.
+For example, use `export PULUMI_CONSOLE_DOMAIN=localhost:8080` for local development.
+Persist this in your shell setup or project environment; `pulumi login` does not
+save a console-domain setting in `credentials.json`. The pinned CLI derives stack
+URLs locally and does not use the list response's `links.self`, so setting
+server-side `BACKEND_CONSOLE_URL` alone does not configure CLI links.
+
+Stack listings return `lastUpdate` as Unix seconds from the latest started
+non-preview, non-dry-run update, including imports and failed updates. New stacks
+and stacks with only previews or unstarted requests omit this field (`n/a` in
+`pulumi stack ls`). Existing update history supplies this value without a migration.
+
 Development Compose sets DEV_HTTP. For deployment, terminate TLS at a reverse proxy, set both URLs to HTTPS and DEV_HTTP=false, restrict direct backend and metrics access to your network, and mount the master key read-only. `/healthz` checks process liveness, `/readyz` checks schema/database readiness, `/metrics` provides bounded-route request counters, failures, and latency histograms. The metric endpoint exposes no stack names, URNs, or tokens. Request logs contain request ID, method, and duration only.
 
 `backendctl` is a local database administrator tool, requiring the same database/master-key configuration. Administrative authorization is filesystem/database access; it is not exposed as a public API. Examples:
